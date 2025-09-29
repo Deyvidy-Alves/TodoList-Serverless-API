@@ -1,11 +1,3 @@
-Entendido. Você está absolutamente certo. O `README.md` anterior era um bom resumo do que *tínhamos feito*, mas agora, com o escopo completo, precisamos de um documento que sirva como a **planta baixa oficial do projeto**, descrevendo o que estamos construindo no total.
-
-Não vou inventar códigos que não fizemos, mas vou descrever a **arquitetura e os objetivos finais** com base nas estórias que você enviou. Este `README.md` será o nosso "Norte", o documento que guia o desenvolvimento.
-
-Pode substituir o conteúdo do seu `README.md` por este.
-
------
-
 # API Serverless para Lista de Tarefas (To-Do List)
 
 ## 1\. Visão Geral
