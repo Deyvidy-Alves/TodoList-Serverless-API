@@ -14,7 +14,6 @@ provider "aws" {
   region = var.aws_region
 }
 
-# --- RECURSOS DA LAMBDA E IAM ---
 
 # Cria a IAM Role para a função Lambda
 resource "aws_iam_role" "lambda_exec_role" {
@@ -47,8 +46,6 @@ resource "aws_lambda_function" "hello_lambda" {
   memory_size      = 256
   tags             = { ManagedBy = "Terraform" }
 }
-
-# --- RECURSOS DO DYNAMODB E IAM ---
 
 # Cria a tabela DynamoDB
 resource "aws_dynamodb_table" "todo_list_table" {
@@ -96,10 +93,6 @@ resource "aws_iam_role_policy_attachment" "dynamodb_attachment" {
   role       = aws_iam_role.lambda_exec_role.name
   policy_arn = aws_iam_policy.dynamodb_policy.arn
 }
-
-# main.tf
-
-# --- RECURSOS DA API GATEWAY (VERSÃO V1 - REST API) ---
 
 # 1. Cria o recurso da API REST (V1)
 resource "aws_api_gateway_rest_api" "todo_api" {

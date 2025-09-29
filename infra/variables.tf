@@ -33,6 +33,5 @@ variable "lambda_runtime" {
 variable "dynamodb_table_name" {
   description = "O nome da tabela DynamoDB a ser criada."
   type        = string
-  # Novo nome padrão, mais adequado ao projeto
   default     = "TodoList"
 }
