@@ -13,9 +13,9 @@ variable "lambda_function_name" {
 }
 
 variable "zip_path" {
-  description = "Caminho para o arquivo .zip do código da Lambda."
+  description = "Caminho para o arquivo .jar do código da Lambda."
   type        = string
-  default     = "../hello-lambda.zip" # Aponta para o arquivo na raiz do projeto
+  default     = "../target/Repo-Java2-1.0-SNAPSHOT.jar"
 }
 
 variable "lambda_handler" {
