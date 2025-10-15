@@ -1,4 +1,3 @@
-# Bloco para configurar o Terraform e o backend remoto
 terraform {
   backend "s3" {
     bucket         = "deyvidy-terraform-state-repojava2"
@@ -9,15 +8,35 @@ terraform {
   }
 }
 
-# Configura o provedor da AWS
 provider "aws" {
   region = var.aws_region
 }
 
+# --- RECURSOS COMUNS (IAM Role e DynamoDB Table) ---
 
-# --- RECURSOS DA LAMBDA E IAM ---
+resource "aws_dynamodb_table" "todo_list_table" {
+  name         = var.dynamodb_table_name
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  tags = {
+    Project = var.project_name
+  }
+}
+
 resource "aws_iam_role" "lambda_exec_role" {
-  name = "${var.lambda_function_name}-role"
+  name = "${var.project_name}-lambda-role"
   assume_role_policy = jsonencode({
     Version   = "2012-10-17",
     Statement = [{
@@ -28,64 +47,8 @@ resource "aws_iam_role" "lambda_exec_role" {
   })
 }
 
-resource "aws_iam_role_policy_attachment" "lambda_logs" {
-  role       = aws_iam_role.lambda_exec_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
-
-resource "aws_lambda_function" "hello_lambda" {
-  filename         = var.zip_path
-  function_name    = var.lambda_function_name
-  role             = aws_iam_role.lambda_exec_role.arn
-  handler          = var.lambda_handler
-  runtime          = var.lambda_runtime
-  source_code_hash = filebase64sha256(var.zip_path)
-  timeout          = 30
-  memory_size      = 256
-  tags             = { ManagedBy = "Terraform" }
-}
-
-# --- RECURSOS DO DYNAMODB E IAM ---
-resource "aws_dynamodb_table" "todo_list_table" {
-  name         = var.dynamodb_table_name
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "PK"
-  range_key    = "SK"
-
-  attribute {
-    name = "PK"
-    type = "S"
-  }
-
-  attribute {
-    name = "SK"
-    type = "S"
-  }
-
-  attribute {
-    name = "GSI1PK"
-    type = "S"
-  }
-
-  attribute {
-    name = "GSI1SK"
-    type = "S"
-  }
-
-  global_secondary_index {
-    name            = "gsi1-ListsIndex"
-    hash_key        = "GSI1PK"
-    range_key       = "GSI1SK"
-    projection_type = "ALL"
-  }
-  tags = {
-    ManagedBy = "Terraform"
-    Project   = "TodoList"
-  }
-}
-
 resource "aws_iam_policy" "dynamodb_policy" {
-  name        = "${var.lambda_function_name}-dynamodb-policy"
+  name        = "${var.project_name}-dynamodb-policy"
   description = "Política que permite à Lambda acessar a tabela DynamoDB"
   policy = jsonencode({
     Version = "2012-10-17",
@@ -95,12 +58,14 @@ resource "aws_iam_policy" "dynamodb_policy" {
         "dynamodb:DeleteItem", "dynamodb:Query"
       ],
       Effect   = "Allow",
-      Resource = [
-        aws_dynamodb_table.todo_list_table.arn,
-        "${aws_dynamodb_table.todo_list_table.arn}/index/*",
-      ]
+      Resource = aws_dynamodb_table.todo_list_table.arn
     }]
   })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_logs" {
+  role       = aws_iam_role.lambda_exec_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "dynamodb_attachment" {
@@ -108,214 +73,225 @@ resource "aws_iam_role_policy_attachment" "dynamodb_attachment" {
   policy_arn = aws_iam_policy.dynamodb_policy.arn
 }
 
-# --- RECURSOS DA API GATEWAY (VERSÃO V1 - REST API) ---
 
-# 1. Definições Principais
-resource "aws_api_gateway_rest_api" "todo_api" {
-  name        = "${var.lambda_function_name}-api-rest"
-  description = "API REST para o projeto To-Do List"
-}
+# --- LAMBDA 1: Criar Lista ---
 
-resource "aws_api_gateway_resource" "lists_resource" {
-  rest_api_id = aws_api_gateway_rest_api.todo_api.id
-  parent_id   = aws_api_gateway_rest_api.todo_api.root_resource_id
-  path_part   = "lists"
-}
+resource "aws_lambda_function" "create_list_lambda" {
+  filename         = var.zip_path
+  function_name    = "${var.project_name}-CreateList"
+  role             = aws_iam_role.lambda_exec_role.arn
+  handler          = "example.CreateListHandler::handleRequest"
+  runtime          = var.lambda_runtime
+  source_code_hash = filebase64sha256(var.zip_path)
+  timeout          = 30
 
-resource "aws_api_gateway_resource" "list_item_resource" {
-  rest_api_id = aws_api_gateway_rest_api.todo_api.id
-  parent_id   = aws_api_gateway_resource.lists_resource.id
-  path_part   = "{listId}"
-}
-
-# 2. Métodos e Integrações
-# POST /lists
-resource "aws_api_gateway_method" "post_lists" {
-  rest_api_id   = aws_api_gateway_rest_api.todo_api.id
-  resource_id   = aws_api_gateway_resource.lists_resource.id
-  http_method   = "POST"
-  authorization = "NONE"
-}
-resource "aws_api_gateway_integration" "post_lists_integration" {
-  rest_api_id             = aws_api_gateway_rest_api.todo_api.id
-  resource_id             = aws_api_gateway_resource.lists_resource.id
-  http_method             = aws_api_gateway_method.post_lists.http_method
-  integration_http_method = "POST"
-  type                    = "AWS_PROXY"
-  uri                     = aws_lambda_function.hello_lambda.invoke_arn
-}
-
-# GET /lists
-resource "aws_api_gateway_method" "get_lists" {
-  rest_api_id   = aws_api_gateway_rest_api.todo_api.id
-  resource_id   = aws_api_gateway_resource.lists_resource.id
-  http_method   = "GET"
-  authorization = "NONE"
-}
-resource "aws_api_gateway_integration" "get_lists_integration" {
-  rest_api_id             = aws_api_gateway_rest_api.todo_api.id
-  resource_id             = aws_api_gateway_resource.lists_resource.id
-  http_method             = aws_api_gateway_method.get_lists.http_method
-  integration_http_method = "POST"
-  type                    = "AWS_PROXY"
-  uri                     = aws_lambda_function.hello_lambda.invoke_arn
-}
-
-# PUT /lists/{listId}
-resource "aws_api_gateway_method" "put_list_item" {
-  rest_api_id   = aws_api_gateway_rest_api.todo_api.id
-  resource_id   = aws_api_gateway_resource.list_item_resource.id
-  http_method   = "PUT"
-  authorization = "NONE"
-}
-resource "aws_api_gateway_integration" "put_list_item_integration" {
-  rest_api_id             = aws_api_gateway_rest_api.todo_api.id
-  resource_id             = aws_api_gateway_resource.list_item_resource.id
-  http_method             = aws_api_gateway_method.put_list_item.http_method
-  integration_http_method = "POST"
-  type                    = "AWS_PROXY"
-  uri                     = aws_lambda_function.hello_lambda.invoke_arn
-}
-
-# DELETE /lists/{listId}
-resource "aws_api_gateway_method" "delete_list_item" {
-  rest_api_id   = aws_api_gateway_rest_api.todo_api.id
-  resource_id   = aws_api_gateway_resource.list_item_resource.id
-  http_method   = "DELETE"
-  authorization = "NONE"
-}
-resource "aws_api_gateway_integration" "delete_list_item_integration" {
-  rest_api_id             = aws_api_gateway_rest_api.todo_api.id
-  resource_id             = aws_api_gateway_resource.list_item_resource.id
-  http_method             = aws_api_gateway_method.delete_list_item.http_method
-  integration_http_method = "POST"
-  type                    = "AWS_PROXY"
-  uri                     = aws_lambda_function.hello_lambda.invoke_arn
-}
-
-# 3. Configurações de CORS
-# CORS para /lists
-resource "aws_api_gateway_method" "options_lists" {
-  rest_api_id   = aws_api_gateway_rest_api.todo_api.id
-  resource_id   = aws_api_gateway_resource.lists_resource.id
-  http_method   = "OPTIONS"
-  authorization = "NONE"
-}
-resource "aws_api_gateway_integration" "options_lists_integration" {
-  rest_api_id       = aws_api_gateway_rest_api.todo_api.id
-  resource_id       = aws_api_gateway_resource.lists_resource.id
-  http_method       = aws_api_gateway_method.options_lists.http_method
-  type              = "MOCK"
-  request_templates = { "application/json" = "{\"statusCode\": 200}" }
-}
-resource "aws_api_gateway_method_response" "options_lists_response" {
-  rest_api_id = aws_api_gateway_rest_api.todo_api.id
-  resource_id = aws_api_gateway_resource.lists_resource.id
-  http_method = aws_api_gateway_method.options_lists.http_method
-  status_code = "200"
-  response_models = { "application/json" = "Empty" }
-  response_parameters = {
-    "method.response.header.Access-Control-Allow-Headers" = true,
-    "method.response.header.Access-Control-Allow-Methods" = true,
-    "method.response.header.Access-Control-Allow-Origin"  = true
-  }
-}
-resource "aws_api_gateway_integration_response" "options_lists_response" {
-  rest_api_id = aws_api_gateway_rest_api.todo_api.id
-  resource_id = aws_api_gateway_resource.lists_resource.id
-  http_method = aws_api_gateway_method.options_lists.http_method
-  status_code = aws_api_gateway_method_response.options_lists_response.status_code
-  response_parameters = {
-    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
-    "method.response.header.Access-Control-Allow-Methods" = "'POST,GET,OPTIONS'",
-    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+  environment {
+    variables = {
+      TABLE_NAME = aws_dynamodb_table.todo_list_table.name
+    }
   }
 }
 
-# CORS para /lists/{listId}
-resource "aws_api_gateway_method" "options_list_item" {
-  rest_api_id   = aws_api_gateway_rest_api.todo_api.id
-  resource_id   = aws_api_gateway_resource.list_item_resource.id
-  http_method   = "OPTIONS"
-  authorization = "NONE"
-}
-resource "aws_api_gateway_integration" "options_list_item_integration" {
-  rest_api_id       = aws_api_gateway_rest_api.todo_api.id
-  resource_id       = aws_api_gateway_resource.list_item_resource.id
-  http_method       = aws_api_gateway_method.options_list_item.http_method
-  type              = "MOCK"
-  request_templates = { "application/json" = "{\"statusCode\": 200}" }
-}
-resource "aws_api_gateway_method_response" "options_list_item_response" {
-  rest_api_id = aws_api_gateway_rest_api.todo_api.id
-  resource_id = aws_api_gateway_resource.list_item_resource.id
-  http_method = aws_api_gateway_method.options_list_item.http_method
-  status_code = "200"
-  response_models = { "application/json" = "Empty" }
-  response_parameters = {
-    "method.response.header.Access-Control-Allow-Headers" = true,
-    "method.response.header.Access-Control-Allow-Methods" = true,
-    "method.response.header.Access-Control-Allow-Origin"  = true
+# --- LAMBDA 2: Obter Lista ---
+
+resource "aws_lambda_function" "get_list_lambda" {
+  filename         = var.zip_path
+  function_name    = "${var.project_name}-GetList"
+  role             = aws_iam_role.lambda_exec_role.arn
+  handler          = "example.GetListHandler::handleRequest"
+  runtime          = var.lambda_runtime
+  source_code_hash = filebase64sha256(var.zip_path)
+  timeout          = 30
+
+  environment {
+    variables = {
+      TABLE_NAME = aws_dynamodb_table.todo_list_table.name
+    }
   }
 }
-resource "aws_api_gateway_integration_response" "options_list_item_response" {
-  rest_api_id = aws_api_gateway_rest_api.todo_api.id
-  resource_id = aws_api_gateway_resource.list_item_resource.id
-  http_method = aws_api_gateway_method.options_list_item.http_method
-  status_code = aws_api_gateway_method_response.options_list_item_response.status_code
-  response_parameters = {
-    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
-    "method.response.header.Access-Control-Allow-Methods" = "'PUT,DELETE,OPTIONS'",
-    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+
+# --- LAMBDA 3: Atualizar/Apagar Lista ---
+
+resource "aws_lambda_function" "update_delete_list_lambda" {
+  filename         = var.zip_path
+  function_name    = "${var.project_name}-UpdateDeleteList"
+  role             = aws_iam_role.lambda_exec_role.arn
+  handler          = "example.UpdateDeleteListHandler::handleRequest"
+  runtime          = var.lambda_runtime
+  source_code_hash = filebase64sha256(var.zip_path)
+  timeout          = 30
+
+  environment {
+    variables = {
+      TABLE_NAME = aws_dynamodb_table.todo_list_table.name
+    }
   }
 }
 
 
-# 4. Deployment e Stage
-resource "aws_api_gateway_deployment" "todo_api_deployment" {
-  rest_api_id = aws_api_gateway_rest_api.todo_api.id
-  lifecycle { create_before_destroy = true }
-  depends_on = [
-    aws_api_gateway_integration.post_lists_integration,
-    aws_api_gateway_integration.get_lists_integration,
-    aws_api_gateway_integration.put_list_item_integration,
-    aws_api_gateway_integration.delete_list_item_integration,
-    aws_api_gateway_integration.options_lists_integration,
-    aws_api_gateway_integration.options_list_item_integration,
+# --- API GATEWAY ---
+
+resource "aws_apigatewayv2_api" "http_api" {
+  name          = "${var.project_name}-api-rest"
+  protocol_type = "HTTP"
+  cors_configuration {
+    allow_origins = ["*"]
+    allow_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    allow_headers = ["Content-Type", "Authorization"]
+  }
+}
+
+resource "aws_apigatewayv2_stage" "default" {
+  api_id      = aws_apigatewayv2_api.http_api.id
+  name        = "$default"
+  auto_deploy = true
+}
+
+# --- AWS COGNITO (Autenticação de Usuários) ---
+
+resource "aws_cognito_user_pool" "user_pool" {
+  name = "${var.project_name}-user-pool"
+
+  # Configura como os usuários podem se registrar e fazer login (usaremos email como username)
+  alias_attributes       = ["email"]
+  auto_verified_attributes = ["email"]
+
+  # Define a política de senha
+  password_policy {
+    minimum_length    = 8
+    require_lowercase = true
+    require_numbers   = true
+    require_symbols   = true
+    require_uppercase = true
+  }
+
+  tags = {
+    Project = var.project_name
+  }
+}
+
+resource "aws_cognito_user_pool_client" "app_client" {
+  name         = "${var.project_name}-app-client"
+  user_pool_id = aws_cognito_user_pool.user_pool.id
+
+  # Desabilita a geração de um "client secret", comum para aplicações web/mobile
+  generate_secret = false
+
+  # Habilita o fluxo de autenticação via usuário e senha, necessário para nossos testes
+  # ADMIN_NO_SRP_AUTH permite que o backend (ou AWS CLI) autentique o usuário diretamente.
+  explicit_auth_flows = [
+    "ALLOW_ADMIN_USER_PASSWORD_AUTH",
+    "ALLOW_USER_PASSWORD_AUTH",
+    "ALLOW_REFRESH_TOKEN_AUTH"
   ]
 }
-resource "aws_api_gateway_stage" "todo_api_stage" {
-  deployment_id = aws_api_gateway_deployment.todo_api_deployment.id
-  rest_api_id   = aws_api_gateway_rest_api.todo_api.id
-  stage_name    = "v1"
+
+# --- INTEGRAÇÃO API GATEWAY COM COGNITO ---
+
+resource "aws_apigatewayv2_authorizer" "cognito_authorizer" {
+  api_id           = aws_apigatewayv2_api.http_api.id
+  name             = "${var.project_name}-cognito-authorizer"
+  authorizer_type  = "JWT"
+
+  # Define onde o API Gateway deve procurar o token na requisição (no header 'Authorization')
+  identity_sources = ["$request.header.Authorization"]
+
+  # Configuração do JWT
+  jwt_configuration {
+    # 'audience' deve ser o ID do nosso App Client
+    audience = [aws_cognito_user_pool_client.app_client.id]
+
+    # 'issuer' é a URL do nosso User Pool
+    issuer   = "https://${aws_cognito_user_pool.user_pool.endpoint}"
+  }
 }
 
-# 5. Permissões da Lambda
-resource "aws_lambda_permission" "post_permission" {
-  statement_id  = "AllowAPIGatewayInvokePOST"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.hello_lambda.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.todo_api.execution_arn}/*/${aws_api_gateway_method.post_lists.http_method}${aws_api_gateway_resource.lists_resource.path}"
+
+# --- Rotas e Integrações ---
+
+# POST /users/{userId}/lists
+resource "aws_apigatewayv2_integration" "create_list_integration" {
+  api_id           = aws_apigatewayv2_api.http_api.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = aws_lambda_function.create_list_lambda.invoke_arn
 }
-resource "aws_lambda_permission" "get_permission" {
-  statement_id  = "AllowAPIGatewayInvokeGET"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.hello_lambda.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.todo_api.execution_arn}/*/${aws_api_gateway_method.get_lists.http_method}${aws_api_gateway_resource.lists_resource.path}"
+resource "aws_apigatewayv2_route" "create_list_route" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /users/{userId}/lists"
+  target    = "integrations/${aws_apigatewayv2_integration.create_list_integration.id}"
+
+  # --- MODIFICADO: Protegendo a rota ---
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
 }
-resource "aws_lambda_permission" "put_permission" {
-  statement_id  = "AllowAPIGatewayInvokePUT"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.hello_lambda.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.todo_api.execution_arn}/*/${aws_api_gateway_method.put_list_item.http_method}${aws_api_gateway_resource.list_item_resource.path}"
+
+# GET /users/{userId}/lists/{listId}
+resource "aws_apigatewayv2_integration" "get_list_integration" {
+  api_id           = aws_apigatewayv2_api.http_api.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = aws_lambda_function.get_list_lambda.invoke_arn
 }
-resource "aws_lambda_permission" "delete_permission" {
-  statement_id  = "AllowAPIGatewayInvokeDELETE"
+resource "aws_apigatewayv2_route" "get_list_route" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /users/{userId}/lists/{listId}"
+  target    = "integrations/${aws_apigatewayv2_integration.get_list_integration.id}"
+
+  # --- MODIFICADO: Protegendo a rota ---
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
+}
+
+# PUT /users/{userId}/lists/{listId}
+resource "aws_apigatewayv2_integration" "update_list_integration" {
+  api_id           = aws_apigatewayv2_api.http_api.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = aws_lambda_function.update_delete_list_lambda.invoke_arn
+}
+resource "aws_apigatewayv2_route" "update_list_route" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "PUT /users/{userId}/lists/{listId}"
+  target    = "integrations/${aws_apigatewayv2_integration.update_list_integration.id}"
+
+  # --- MODIFICADO: Protegendo a rota ---
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
+}
+
+# DELETE /users/{userId}/lists/{listId}
+resource "aws_apigatewayv2_integration" "delete_list_integration" {
+  api_id           = aws_apigatewayv2_api.http_api.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = aws_lambda_function.update_delete_list_lambda.invoke_arn
+}
+resource "aws_apigatewayv2_route" "delete_list_route" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "DELETE /users/{userId}/lists/{listId}"
+  target    = "integrations/${aws_apigatewayv2_integration.delete_list_integration.id}"
+
+  # --- MODIFICADO: Protegendo a rota ---
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
+}
+
+# Permissões para API Gateway invocar as Lambdas
+resource "aws_lambda_permission" "api_gtw_permission_create" {
+  statement_id  = "AllowAPIGatewayToInvokeCreate"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.hello_lambda.function_name
+  function_name = aws_lambda_function.create_list_lambda.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.todo_api.execution_arn}/*/${aws_api_gateway_method.delete_list_item.http_method}${aws_api_gateway_resource.list_item_resource.path}"
+  source_arn    = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*"
+}
+resource "aws_lambda_permission" "api_gtw_permission_get" {
+  statement_id  = "AllowAPIGatewayToInvokeGet"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.get_list_lambda.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*"
+}
+resource "aws_lambda_permission" "api_gtw_permission_update_delete" {
+  statement_id  = "AllowAPIGatewayToInvokeUpdateDelete"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.update_delete_list_lambda.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*"
 }

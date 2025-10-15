@@ -1,37 +1,29 @@
-# variables.tf
-
 variable "aws_region" {
   description = "Região da AWS onde os recursos serão criados."
   type        = string
   default     = "sa-east-1"
 }
 
-variable "lambda_function_name" {
-  description = "Nome da função lambda"
+variable "project_name" {
+  description = "Nome base para os recursos do projeto."
   type        = string
-  default     = "HelloWorldJava"
+  default     = "TodoList"
 }
 
 variable "zip_path" {
   description = "Caminho para o arquivo .jar do código da Lambda."
   type        = string
-  default     = "../target/Repo-Java2-1.0-SNAPSHOT.jar"
-}
-
-variable "lambda_handler" {
-  description = "O handler da função Lambda (pacote.Classe::metodo)."
-  type        = string
-  default     = "example.Hello::handleRequest" # Altere para o seu handler correto
+  default     = "../target/todo-lambdas-1.0-SNAPSHOT.jar"
 }
 
 variable "lambda_runtime" {
   description = "O runtime da função Lambda."
   type        = string
-  default     = "java21"
+  default     = "java17"
 }
 
 variable "dynamodb_table_name" {
-  description = "O nome da tabela DynamoDB a ser criada."
+  description = "O nome da tabela DynamoDB."
   type        = string
   default     = "TodoList"
 }
