@@ -54,7 +54,7 @@ A tabela `TodoList` utiliza o padrão Single Table Design para otimizar as consu
 
 * **GSI1 (Global Secondary Index):** Permite a consulta `Query(GSI1PK = "LISTS")` para obter todas as listas de forma eficiente, atendendo ao requisito de "NÃO UTILIZAR SCAN".
 
-## 4. Roadmap de Desenvolvimento
+## 4. Roadmap de Desenvolvimento![img.png](img.png)
 
 - [x] **Spike Terraform:** Estudo dos comandos e armazenamento de estado no S3.
 - [x] **Spike Lambda via Terraform:** Criação de uma função Lambda "Hello World".
