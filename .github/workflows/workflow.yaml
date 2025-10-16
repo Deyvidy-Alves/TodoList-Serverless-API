@@ -1,21 +1,28 @@
-name: Continuos Integration
+name: Continuous Integration - Java Application
 
-on: [push]
+on:
+  push:
+    branches:
+      - develop
+      - main
+  pull_request:
+    branches:
+      - develop
 
 jobs:
-  continuos-integration:
+  build-and-test:
+    name: Build and Test Java App
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
       - name: Setup JDK 21
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
+          distribution: 'temurin'
           java-version: '21'
+          cache: 'maven'
 
-      - name: mvn package and test
-        run: |
-          mvn package
-          mvn test
+      - name: Build, Test, and Package with Maven
+        run: mvn -B verify
