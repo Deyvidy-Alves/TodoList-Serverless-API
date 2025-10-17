@@ -10,22 +10,28 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write # <-- Permissão necessária para comentar no PR
+  pull-requests: write
 
 jobs:
-  # JOB 1: Roda o PLAN em Pull Requests
   terraform-plan:
     name: 'Terraform Plan'
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' # <-- Roda apenas para PRs
-
-    defaults:
-      run:
-        working-directory: ./infra
+    if: github.event_name == 'pull_request'
 
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+
+      - name: Build Java Application with Maven
+        run: mvn -B package
+      # --------------------------------------------------
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -39,10 +45,12 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
+        working-directory: ./infra
 
       - name: Terraform Plan
         id: plan
-        run: terraform plan -input=false -no-color -out=tfplan
+        run: terraform plan -input=false -no-color
+        working-directory: ./infra
 
       - name: Post Plan to PR
         uses: actions/github-script@v6
@@ -64,19 +72,25 @@ jobs:
         env:
           tf_plan: ${{ steps.plan.outputs.stdout }}
 
-  # JOB 2: Roda o APPLY após o MERGE na branch 'develop'
   terraform-apply:
     name: 'Terraform Apply'
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
 
-    defaults:
-      run:
-        working-directory: ./infra
-
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+
+      - name: Build Java Application with Maven
+        run: mvn -B package
+      # ---------------------------------------------------
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -90,6 +104,8 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
+        working-directory: ./infra
 
       - name: Terraform Apply
-        run: terraform apply -auto-  approve -input=false
+        run: terraform apply -auto-approve -input=false
+        working-directory: ./infra
