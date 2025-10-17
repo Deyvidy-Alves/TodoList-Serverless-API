@@ -31,7 +31,6 @@ jobs:
 
       - name: Build Java Application with Maven
         run: mvn -B package
-      # --------------------------------------------------
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -90,7 +89,6 @@ jobs:
 
       - name: Build Java Application with Maven
         run: mvn -B package
-      # ---------------------------------------------------
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
