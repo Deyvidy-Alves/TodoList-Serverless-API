@@ -144,6 +144,25 @@ resource "aws_lambda_function" "create_item_lambda" {
   }
 }
 
+# --- LAMBDA 5: Listar Itens da Lista ---
+
+resource "aws_lambda_function" "list_items_lambda" {
+  filename         = var.zip_path
+  function_name    = "${var.project_name}-ListItems"
+  role             = aws_iam_role.lambda_exec_role.arn
+  # IMPORTANTE: O handler aponta para a nova classe Java
+  handler          = "example.ListItemsHandler::handleRequest"
+  runtime          = var.lambda_runtime
+  source_code_hash = filebase64sha256(var.zip_path)
+  timeout          = 30
+
+  environment {
+    variables = {
+      TABLE_NAME = aws_dynamodb_table.todo_list_table.name
+    }
+  }
+}
+
 
 # --- API GATEWAY ---
 
@@ -308,6 +327,23 @@ resource "aws_apigatewayv2_route" "create_item_route" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
 }
 
+# GET /lists/{listId}/items
+resource "aws_apigatewayv2_integration" "list_items_integration" {
+  api_id           = aws_apigatewayv2_api.http_api.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = aws_lambda_function.list_items_lambda.invoke_arn
+}
+
+resource "aws_apigatewayv2_route" "list_items_route" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /lists/{listId}/items"
+  target    = "integrations/${aws_apigatewayv2_integration.list_items_integration.id}"
+
+  # Rota também protegida pelo Cognito
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
+}
+
 # Permissões para API Gateway invocar as Lambdas
 resource "aws_lambda_permission" "api_gtw_permission_create" {
   statement_id  = "AllowAPIGatewayToInvokeCreate"
@@ -335,6 +371,14 @@ resource "aws_lambda_permission" "api_gtw_permission_create_item" {
   statement_id  = "AllowAPIGatewayToInvokeCreateItem"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.create_item_lambda.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "api_gtw_permission_list_items" {
+  statement_id  = "AllowAPIGatewayToInvokeListItems"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.list_items_lambda.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*"
 }
