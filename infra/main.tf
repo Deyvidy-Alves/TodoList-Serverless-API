@@ -128,6 +128,8 @@ resource "aws_lambda_function" "update_delete_list_lambda" {
   }
 }
 
+# --- LAMBDA 4: Criar Item na Lista ---
+
 resource "aws_lambda_function" "create_item_lambda" {
   filename         = var.zip_path
   function_name    = "${var.project_name}-CreateItem"
@@ -150,7 +152,6 @@ resource "aws_lambda_function" "list_items_lambda" {
   filename         = var.zip_path
   function_name    = "${var.project_name}-ListItems"
   role             = aws_iam_role.lambda_exec_role.arn
-  # IMPORTANTE: O handler aponta para a nova classe Java
   handler          = "example.ListItemsHandler::handleRequest"
   runtime          = var.lambda_runtime
   source_code_hash = filebase64sha256(var.zip_path)
@@ -174,6 +175,12 @@ resource "aws_apigatewayv2_api" "http_api" {
     allow_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
     allow_headers = ["Content-Type", "Authorization"]
   }
+
+  # --- ALTERAÇÃO FEITA AQUI ---
+  tags = {
+    # Esta tag força uma atualização na API a cada deploy
+    LastDeploy = timestamp()
+  }
 }
 
 resource "aws_apigatewayv2_stage" "default" {
@@ -187,11 +194,9 @@ resource "aws_apigatewayv2_stage" "default" {
 resource "aws_cognito_user_pool" "user_pool" {
   name = "${var.project_name}-user-pool"
 
-  # Configura como os usuários podem se registrar e fazer login (usaremos email como username)
   alias_attributes       = ["email"]
   auto_verified_attributes = ["email"]
 
-  # Define a política de senha
   password_policy {
     minimum_length    = 8
     require_lowercase = true
@@ -209,18 +214,14 @@ resource "aws_cognito_user_pool_client" "app_client" {
   name         = "${var.project_name}-app-client"
   user_pool_id = aws_cognito_user_pool.user_pool.id
 
-  # Desabilita a geração de um "client secret", comum para aplicações web/mobile
   generate_secret = false
 
-  # Habilita o fluxo de autenticação via usuário e senha, necessário para nossos testes
-  # ADMIN_NO_SRP_AUTH permite que o backend (ou AWS CLI) autentique o usuário diretamente.
   explicit_auth_flows = [
     "ALLOW_ADMIN_USER_PASSWORD_AUTH",
     "ALLOW_USER_PASSWORD_AUTH",
     "ALLOW_REFRESH_TOKEN_AUTH"
   ]
 }
-
 
 
 # --- INTEGRAÇÃO API GATEWAY COM COGNITO ---
@@ -230,15 +231,10 @@ resource "aws_apigatewayv2_authorizer" "cognito_authorizer" {
   name             = "${var.project_name}-cognito-authorizer"
   authorizer_type  = "JWT"
 
-  # Define onde o API Gateway deve procurar o token na requisição (no header 'Authorization')
   identity_sources = ["$request.header.Authorization"]
 
-  # Configuração do JWT
   jwt_configuration {
-    # 'audience' deve ser o ID do nosso App Client
     audience = [aws_cognito_user_pool_client.app_client.id]
-
-    # 'issuer' é a URL do nosso User Pool
     issuer   = "https://${aws_cognito_user_pool.user_pool.endpoint}"
   }
 }
@@ -257,7 +253,6 @@ resource "aws_apigatewayv2_route" "create_list_route" {
   route_key = "POST /users/{userId}/lists"
   target    = "integrations/${aws_apigatewayv2_integration.create_list_integration.id}"
 
-  # --- MODIFICADO: Protegendo a rota ---
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
 }
@@ -273,7 +268,6 @@ resource "aws_apigatewayv2_route" "get_list_route" {
   route_key = "GET /users/{userId}/lists/{listId}"
   target    = "integrations/${aws_apigatewayv2_integration.get_list_integration.id}"
 
-  # --- MODIFICADO: Protegendo a rota ---
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
 }
@@ -289,7 +283,6 @@ resource "aws_apigatewayv2_route" "update_list_route" {
   route_key = "PUT /users/{userId}/lists/{listId}"
   target    = "integrations/${aws_apigatewayv2_integration.update_list_integration.id}"
 
-  # --- MODIFICADO: Protegendo a rota ---
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
 }
@@ -305,7 +298,6 @@ resource "aws_apigatewayv2_route" "delete_list_route" {
   route_key = "DELETE /users/{userId}/lists/{listId}"
   target    = "integrations/${aws_apigatewayv2_integration.delete_list_integration.id}"
 
-  # --- MODIFICADO: Protegendo a rota ---
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
 }
@@ -322,7 +314,6 @@ resource "aws_apigatewayv2_route" "create_item_route" {
   route_key = "POST /lists/{listId}/items"
   target    = "integrations/${aws_apigatewayv2_integration.create_item_integration.id}"
 
-  # Rota também protegida pelo Cognito
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
 }
@@ -339,7 +330,6 @@ resource "aws_apigatewayv2_route" "list_items_route" {
   route_key = "GET /lists/{listId}/items"
   target    = "integrations/${aws_apigatewayv2_integration.list_items_integration.id}"
 
-  # Rota também protegida pelo Cognito
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
 }
