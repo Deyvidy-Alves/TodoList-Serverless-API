@@ -1,22 +1,29 @@
-name: Continuous Integration - Java Application
+name: 'Terraform CI/CD'
 
 on:
   push:
     branches:
       - develop
-      - main
   pull_request:
     branches:
       - develop
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
-  build-and-test:
-    name: Build and Test Java App
+  # JOB 1: Roda o PLAN em Pull Requests
+  terraform-plan:
+    name: 'Terraform Plan'
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
+      # --- PASSOS ADICIONADOS PARA CONSTRUIR O JAR ---
       - name: Setup JDK 21
         uses: actions/setup-java@v4
         with:
@@ -24,5 +31,85 @@ jobs:
           java-version: '21'
           cache: 'maven'
 
-      - name: Build, Test, and Package with Maven
-        run: mvn -B verify
+      - name: Build Java Application with Maven
+        run: mvn -B package # O '-B' roda em modo batch
+      # -----------------------------------------------
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: sa-east-1
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ./infra
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -input=false -no-color
+        working-directory: ./infra
+
+      - name: Post Plan to PR
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const output = `#### Terraform Plan 📖
+
+            \`\`\`hcl
+            ${process.env.tf_plan}
+            \`\`\`
+            *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+        env:
+          tf_plan: ${{ steps.plan.outputs.stdout }}
+
+  # JOB 2: Roda o APPLY após o MERGE na branch 'develop'
+  terraform-apply:
+    name: 'Terraform Apply'
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # --- PASSOS ADICIONADOS PARA CONSTRUIR O JAR ---
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+
+      - name: Build Java Application with Maven
+        run: mvn -B package
+      # -----------------------------------------------
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: sa-east-1
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ./infra
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve -input=false
+        working-directory: ./infra
