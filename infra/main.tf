@@ -128,6 +128,22 @@ resource "aws_lambda_function" "update_delete_list_lambda" {
   }
 }
 
+resource "aws_lambda_function" "create_item_lambda" {
+  filename         = var.zip_path
+  function_name    = "${var.project_name}-CreateItem"
+  role             = aws_iam_role.lambda_exec_role.arn
+  handler          = "example.CreateItemHandler::handleRequest"
+  runtime          = var.lambda_runtime
+  source_code_hash = filebase64sha256(var.zip_path)
+  timeout          = 30
+
+  environment {
+    variables = {
+      TABLE_NAME = aws_dynamodb_table.todo_list_table.name
+    }
+  }
+}
+
 
 # --- API GATEWAY ---
 
@@ -185,6 +201,8 @@ resource "aws_cognito_user_pool_client" "app_client" {
     "ALLOW_REFRESH_TOKEN_AUTH"
   ]
 }
+
+
 
 # --- INTEGRAÇÃO API GATEWAY COM COGNITO ---
 
@@ -273,6 +291,23 @@ resource "aws_apigatewayv2_route" "delete_list_route" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
 }
 
+# POST /lists/{listId}/items
+resource "aws_apigatewayv2_integration" "create_item_integration" {
+  api_id           = aws_apigatewayv2_api.http_api.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = aws_lambda_function.create_item_lambda.invoke_arn
+}
+
+resource "aws_apigatewayv2_route" "create_item_route" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /lists/{listId}/items"
+  target    = "integrations/${aws_apigatewayv2_integration.create_item_integration.id}"
+
+  # Rota também protegida pelo Cognito
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
+}
+
 # Permissões para API Gateway invocar as Lambdas
 resource "aws_lambda_permission" "api_gtw_permission_create" {
   statement_id  = "AllowAPIGatewayToInvokeCreate"
@@ -292,6 +327,14 @@ resource "aws_lambda_permission" "api_gtw_permission_update_delete" {
   statement_id  = "AllowAPIGatewayToInvokeUpdateDelete"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.update_delete_list_lambda.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "api_gtw_permission_create_item" {
+  statement_id  = "AllowAPIGatewayToInvokeCreateItem"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.create_item_lambda.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*"
 }
