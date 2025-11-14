@@ -65,9 +65,12 @@ resource "aws_iam_policy" "lambda_policy" {
         Resource = aws_dynamodb_table.todo_list_table.arn
       },
       {
-        # Permissão para a Fila SQS
+        # Permissão para a Fila SQS (Enviar, Receber, Apagar)
         Action = [
-          "sqs:SendMessage"
+          "sqs:SendMessage",
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes"
         ],
         Effect   = "Allow",
         Resource = aws_sqs_queue.csv_export_queue.arn
@@ -499,6 +502,27 @@ resource "aws_apigatewayv2_route" "get_item_route" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
 }
 
+# --- LAMBDA 10: Processar Exportação CSV (Acionada pela SQS) ---
+
+resource "aws_lambda_function" "process_export_lambda" {
+  filename         = var.zip_path
+  function_name    = "${var.project_name}-ProcessExport"
+  role             = aws_iam_role.lambda_exec_role.arn
+  handler          = "example.ProcessExportHandler::handleRequest"
+  runtime          = var.lambda_runtime
+  source_code_hash = filebase64sha256(var.zip_path)
+  timeout          = 300 #(mesmo tempo do SQS)
+
+  environment {
+    variables = {
+      TABLE_NAME   = aws_dynamodb_table.todo_list_table.name
+      BUCKET_NAME  = aws_s3_bucket.csv_export_bucket.id
+      USER_POOL_ID = aws_cognito_user_pool.user_pool.id
+      SENDER_EMAIL = aws_ses_email_identity.email_sender.email
+    }
+  }
+}
+
 # Solicitar Exportação
 
 # POST /lists/{listId}/export
@@ -587,6 +611,12 @@ resource "aws_lambda_permission" "api_gtw_permission_request_export" {
   function_name = aws_lambda_function.request_export_lambda.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*"
+}
+
+resource "aws_lambda_event_source_mapping" "sqs_trigger" {
+  event_source_arn = aws_sqs_queue.csv_export_queue.arn
+  function_name    = aws_lambda_function.process_export_lambda.arn
+  batch_size       = 1 # Processa uma mensagem de cada vez
 }
 
 # --- RECURSOS PARA O FLUXO DE EXPORTAÇÃO (CSV) ---
