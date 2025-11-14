@@ -47,19 +47,57 @@ resource "aws_iam_role" "lambda_exec_role" {
   })
 }
 
-resource "aws_iam_policy" "dynamodb_policy" {
-  name        = "${var.project_name}-dynamodb-policy"
-  description = "Política que permite à Lambda acessar a tabela DynamoDB"
+# --- CORREÇÃO FEITA AQUI ---
+# Esta política agora tem um novo nome e inclui permissões para SQS, S3, Cognito e SES
+resource "aws_iam_policy" "lambda_policy" {
+  name        = "${var.project_name}-lambda-policy"
+  description = "Política que permite à Lambda acessar DynamoDB, SQS, S3, Cognito e SES"
   policy = jsonencode({
     Version = "2012-10-17",
-    Statement = [{
-      Action = [
-        "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem",
-        "dynamodb:DeleteItem", "dynamodb:Query"
-      ],
-      Effect   = "Allow",
-      Resource = aws_dynamodb_table.todo_list_table.arn
-    }]
+    Statement = [
+      {
+        # Permissão para o DynamoDB
+        Action = [
+          "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem", "dynamodb:Query"
+        ],
+        Effect   = "Allow",
+        Resource = aws_dynamodb_table.todo_list_table.arn
+      },
+      {
+        # Permissão para a Fila SQS
+        Action = [
+          "sqs:SendMessage"
+        ],
+        Effect   = "Allow",
+        Resource = aws_sqs_queue.csv_export_queue.arn
+      },
+      {
+        # Permissão para o Bucket S3
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject"
+        ],
+        Effect   = "Allow",
+        Resource = "${aws_s3_bucket.csv_export_bucket.arn}/*"
+      },
+      {
+        # Permissão para o Cognito (buscar email do usuário)
+        Action = [
+          "cognito-idp:AdminGetUser"
+        ],
+        Effect   = "Allow",
+        Resource = aws_cognito_user_pool.user_pool.arn
+      },
+      {
+        # Permissão para o SES (enviar email)
+        Action = [
+          "ses:SendEmail"
+        ],
+        Effect   = "Allow",
+        Resource = aws_ses_email_identity.email_sender.arn
+      }
+    ]
   })
 }
 
@@ -68,9 +106,11 @@ resource "aws_iam_role_policy_attachment" "lambda_logs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+# --- CORREÇÃO FEITA AQUI ---
+# Anexa a nova política (lambda_policy) em vez da antiga (dynamodb_policy)
 resource "aws_iam_role_policy_attachment" "dynamodb_attachment" {
   role       = aws_iam_role.lambda_exec_role.name
-  policy_arn = aws_iam_policy.dynamodb_policy.arn
+  policy_arn = aws_iam_policy.lambda_policy.arn # <-- Alterado de dynamodb_policy.arn
 }
 
 
@@ -502,4 +542,58 @@ resource "aws_lambda_permission" "api_gtw_permission_get_item" {
   function_name = aws_lambda_function.get_item_lambda.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*"
+}
+
+# --- RECURSOS PARA O FLUXO DE EXPORTAÇÃO (CSV) ---
+
+# 1. Fila SQS para receber os pedidos de exportação
+resource "aws_sqs_queue" "csv_export_queue" {
+  name = "${var.project_name}-csv-export-queue"
+
+  # Tempo que a Lambda terá para processar a mensagem antes que ela volte para a fila
+  visibility_timeout_seconds = 300 # 5 minutos
+}
+
+# 2. Bucket S3 para armazenar os relatórios CSV gerados
+resource "aws_s3_bucket" "csv_export_bucket" {
+  # O nome do bucket precisa ser globalmente único.
+  # Se este der erro, adicione alguns números aleatórios no final.
+  bucket = "${lower(var.project_name)}-csv-exports-bucket-deyvidy"
+
+  tags = {
+    Project = var.project_name
+  }
+}
+
+# 3. Permissão pública de leitura para os objetos no bucket
+# Isso permite que qualquer pessoa com o link (que enviaremos por email) possa baixar o CSV.
+resource "aws_s3_bucket_public_access_block" "csv_export_bucket_public_access" {
+  bucket = aws_s3_bucket.csv_export_bucket.id
+
+  block_public_acls       = false
+  block_public_policy     = false
+  ignore_public_acls      = false
+  restrict_public_buckets = false
+}
+
+resource "aws_s3_bucket_policy" "csv_export_bucket_policy" {
+  bucket = aws_s3_bucket.csv_export_bucket.id
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Sid       = "PublicReadGetObject",
+        Effect    = "Allow",
+        Principal = "*",
+        Action    = "s3:GetObject",
+        Resource  = "${aws_s3_bucket.csv_export_bucket.arn}/*"
+      }
+    ]
+  })
+}
+
+
+# A AWS enviará um email de verificação para este endereço.
+resource "aws_ses_email_identity" "email_sender" {
+  email = "deyvidyalves03@gmail.com"
 }
