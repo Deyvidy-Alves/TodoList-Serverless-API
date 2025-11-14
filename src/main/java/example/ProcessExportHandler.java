@@ -4,7 +4,7 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.SQSEvent;
 import com.google.gson.Gson;
-import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.core.sync.RequestBody; // Usado para enviar o corpo do CSV para o S3
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminGetUserRequest;
@@ -88,7 +88,6 @@ public class ProcessExportHandler implements RequestHandler<SQSEvent, Void> {
             } catch (Exception e) {
                 context.getLogger().log("ERRO AO PROCESSAR MENSAGEM: " + e.getMessage());
                 // Lança a exceção para que a SQS saiba que a mensagem falhou
-                // e possa tentar de novo mais tarde (dead-letter queue, etc.)
                 throw new RuntimeException("Falha ao processar mensagem SQS", e);
             }
         }
@@ -124,16 +123,17 @@ public class ProcessExportHandler implements RequestHandler<SQSEvent, Void> {
     }
 
     private String saveCsvToS3(String csvContent, String fileName) {
+        // 1. Define S3 Request METADATA (Bucket, Key, ContentType)
         PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                 .bucket(this.bucketName)
                 .key("reports/" + fileName) // Salva numa pasta "reports"
-                .body(RequestBody.fromString(csvContent))
                 .contentType("text/csv")
                 .build();
 
-        s3Client.putObject(putObjectRequest);
+        // 2. Execute a requisição, passando a Requisição de metadados E o Corpo do arquivo (RequestBody)
+        s3Client.putObject(putObjectRequest, RequestBody.fromString(csvContent));
 
-        // Retorna a URL pública do objeto
+        // 3. Retorna a URL pública do objeto
         return String.format("https://%s.s3.%s.amazonaws.com/reports/%s",
                 this.bucketName, Region.SA_EAST_1.id(), fileName);
     }

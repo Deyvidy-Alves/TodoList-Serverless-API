@@ -38,8 +38,7 @@ public class RequestExportHandler implements RequestHandler<APIGatewayProxyReque
             // 1. Pega o listId da URL
             String listId = event.getPathParameters().get("listId");
 
-            // 2. --- ESTA É A CORREÇÃO ---
-            // O Authorizer do Cognito joga os "claims" direto no mapa 'authorizer'.
+            // 2. O Authorizer do Cognito joga os "claims" direto no mapa 'authorizer'.
             Map<String, Object> authorizer = event.getRequestContext().getAuthorizer();
             String userId = (String) authorizer.get("cognito:username");
 
