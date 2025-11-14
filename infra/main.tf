@@ -12,7 +12,7 @@ provider "aws" {
   region = var.aws_region
 }
 
-# --- RECURSOS COMUNS (IAM Role e DynamoDB Table) ---
+# Implementações de IAM role e DynamoDB
 
 resource "aws_dynamodb_table" "todo_list_table" {
   name         = var.dynamodb_table_name
@@ -74,7 +74,7 @@ resource "aws_iam_role_policy_attachment" "dynamodb_attachment" {
 }
 
 
-# --- LAMBDA 1: Criar Lista ---
+# (CreateListHandler)Cria lista
 
 resource "aws_lambda_function" "create_list_lambda" {
   filename         = var.zip_path
@@ -92,7 +92,7 @@ resource "aws_lambda_function" "create_list_lambda" {
   }
 }
 
-# --- LAMBDA 2: Obter Lista ---
+# (GetListHandler)Obtem lista
 
 resource "aws_lambda_function" "get_list_lambda" {
   filename         = var.zip_path
@@ -110,7 +110,7 @@ resource "aws_lambda_function" "get_list_lambda" {
   }
 }
 
-# --- LAMBDA 3: Atualizar/Apagar Lista ---
+# (UpdateDeleteListHandler)Atualiza/apaga lista
 
 resource "aws_lambda_function" "update_delete_list_lambda" {
   filename         = var.zip_path
@@ -128,7 +128,7 @@ resource "aws_lambda_function" "update_delete_list_lambda" {
   }
 }
 
-# --- LAMBDA 4: Criar Item na Lista ---
+# (CreateItemHandler)Cria item na lista
 
 resource "aws_lambda_function" "create_item_lambda" {
   filename         = var.zip_path
@@ -146,7 +146,7 @@ resource "aws_lambda_function" "create_item_lambda" {
   }
 }
 
-# --- LAMBDA 5: Listar Itens da Lista ---
+# (ListItemsHandler)Lista itens da lista
 
 resource "aws_lambda_function" "list_items_lambda" {
   filename         = var.zip_path
@@ -164,7 +164,7 @@ resource "aws_lambda_function" "list_items_lambda" {
   }
 }
 
-# --- LAMBDA 6: Excluir Item da Lista ---
+# (DeleteItemHandler)Exclui item da lista ---
 
 resource "aws_lambda_function" "delete_item_lambda" {
   filename         = var.zip_path
@@ -182,7 +182,7 @@ resource "aws_lambda_function" "delete_item_lambda" {
   }
 }
 
-# --- LAMBDA 7: Atualizar Item da Lista ---
+# (UpdateItemHandler)Atualiza item da lista
 
 resource "aws_lambda_function" "update_item_lambda" {
   filename         = var.zip_path
@@ -200,7 +200,7 @@ resource "aws_lambda_function" "update_item_lambda" {
   }
 }
 
-# --- LAMBDA 8: Obter Item Específico da Lista ---
+# (GetItemHandler)Obtem item específico da lista
 
 resource "aws_lambda_function" "get_item_lambda" {
   filename         = var.zip_path
@@ -219,7 +219,7 @@ resource "aws_lambda_function" "get_item_lambda" {
 }
 
 
-# --- API GATEWAY ---
+# api gateway
 
 resource "aws_apigatewayv2_api" "http_api" {
   name          = "${var.project_name}-api-rest"
@@ -230,9 +230,7 @@ resource "aws_apigatewayv2_api" "http_api" {
     allow_headers = ["Content-Type", "Authorization"]
   }
 
-  # --- ALTERAÇÃO FEITA AQUI ---
   tags = {
-    # Esta tag força uma atualização na API a cada deploy
     LastDeploy = timestamp()
   }
 }
@@ -243,7 +241,7 @@ resource "aws_apigatewayv2_stage" "default" {
   auto_deploy = true
 }
 
-# --- AWS COGNITO (Autenticação de Usuários) ---
+# Autenticação de usuário
 
 resource "aws_cognito_user_pool" "user_pool" {
   name = "${var.project_name}-user-pool"
@@ -278,7 +276,7 @@ resource "aws_cognito_user_pool_client" "app_client" {
 }
 
 
-# --- INTEGRAÇÃO API GATEWAY COM COGNITO ---
+# integração com cognito
 
 resource "aws_apigatewayv2_authorizer" "cognito_authorizer" {
   api_id           = aws_apigatewayv2_api.http_api.id
@@ -294,7 +292,7 @@ resource "aws_apigatewayv2_authorizer" "cognito_authorizer" {
 }
 
 
-# --- Rotas e Integrações ---
+#  Rotas
 
 # POST /users/{userId}/lists
 resource "aws_apigatewayv2_integration" "create_list_integration" {
@@ -388,7 +386,7 @@ resource "aws_apigatewayv2_route" "list_items_route" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
 }
 
-# --- Rota e Integração da API para Atualizar Item ---
+# Atualizar item
 
 # PUT /lists/{listId}/items/{itemId}
 resource "aws_apigatewayv2_integration" "update_item_integration" {
@@ -406,7 +404,7 @@ resource "aws_apigatewayv2_route" "update_item_route" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
 }
 
-# --- Rota e Integração da API para Excluir Item ---
+# Excluir Item
 
 # DELETE /lists/{listId}/items/{itemId}
 resource "aws_apigatewayv2_integration" "delete_item_integration" {
@@ -420,12 +418,11 @@ resource "aws_apigatewayv2_route" "delete_item_route" {
   route_key = "DELETE /lists/{listId}/items/{itemId}"
   target    = "integrations/${aws_apigatewayv2_integration.delete_item_integration.id}"
 
-  # Rota também protegida pelo Cognito
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
 }
 
-# --- Rota e Integração da API para Obter Item Específico ---
+# Obter item específico
 
 # GET /lists/{listId}/items/{itemId}
 resource "aws_apigatewayv2_integration" "get_item_integration" {
@@ -444,7 +441,7 @@ resource "aws_apigatewayv2_route" "get_item_route" {
 }
 
 
-# Permissões para API Gateway invocar as Lambdas
+# Permissões para invocar as Lambdas
 resource "aws_lambda_permission" "api_gtw_permission_create" {
   statement_id  = "AllowAPIGatewayToInvokeCreate"
   action        = "lambda:InvokeFunction"

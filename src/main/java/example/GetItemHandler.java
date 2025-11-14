@@ -25,7 +25,6 @@ public class GetItemHandler implements RequestHandler<APIGatewayProxyRequestEven
         this.tableName = System.getenv("TABLE_NAME");
     }
 
-    // Classe interna para formatar a resposta do item
     private static class ItemResponse {
         private String itemId;
         private String text;
@@ -43,11 +42,9 @@ public class GetItemHandler implements RequestHandler<APIGatewayProxyRequestEven
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent event, Context context) {
         try {
-            // 1. Extrai os IDs da URL
             String listId = event.getPathParameters().get("listId");
             String itemId = event.getPathParameters().get("itemId");
 
-            // 2. Define a chave composta exata (PK e SK)
             String pk = "LIST#" + listId;
             String sk = "ITEM#" + itemId;
 
@@ -55,7 +52,6 @@ public class GetItemHandler implements RequestHandler<APIGatewayProxyRequestEven
             keyToGet.put("pk", AttributeValue.builder().s(pk).build());
             keyToGet.put("sk", AttributeValue.builder().s(sk).build());
 
-            // 3. Monta e executa a requisição GetItem
             GetItemRequest getItemRequest = GetItemRequest.builder()
                     .tableName(this.tableName)
                     .key(keyToGet)
@@ -63,14 +59,12 @@ public class GetItemHandler implements RequestHandler<APIGatewayProxyRequestEven
 
             GetItemResponse response = dynamoDbClient.getItem(getItemRequest);
 
-            // 4. Verifica se o item foi encontrado
             if (!response.hasItem()) {
                 return new APIGatewayProxyResponseEvent()
                         .withStatusCode(404)
                         .withBody("{\"message\": \"Item não encontrado.\"}");
             }
 
-            // 5. Formata e retorna o item
             ItemResponse itemResponse = new ItemResponse(response.item());
             return new APIGatewayProxyResponseEvent()
                     .withStatusCode(200)
