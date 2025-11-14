@@ -280,6 +280,27 @@ resource "aws_lambda_function" "request_export_lambda" {
   }
 }
 
+# --- LAMBDA 10: Processar Exportação CSV (Acionada pela SQS) ---
+
+resource "aws_lambda_function" "process_export_lambda" {
+  filename         = var.zip_path
+  function_name    = "${var.project_name}-ProcessExport"
+  role             = aws_iam_role.lambda_exec_role.arn
+  handler          = "example.ProcessExportHandler::handleRequest"
+  runtime          = var.lambda_runtime
+  source_code_hash = filebase64sha256(var.zip_path)
+  timeout          = 300 # 5 minutos
+
+  environment {
+    variables = {
+      TABLE_NAME   = aws_dynamodb_table.todo_list_table.name
+      BUCKET_NAME  = aws_s3_bucket.csv_export_bucket.id
+      USER_POOL_ID = aws_cognito_user_pool.user_pool.id
+      SENDER_EMAIL = aws_ses_email_identity.email_sender.email
+    }
+  }
+}
+
 
 # api gateway
 
@@ -668,4 +689,13 @@ resource "aws_s3_bucket_policy" "csv_export_bucket_policy" {
 # A AWS enviará um email de verificação para este endereço.
 resource "aws_ses_email_identity" "email_sender" {
   email = "deyvidyalves03@gmail.com"
+}
+
+# --- Gatilho SQS -> Lambda ---
+# Isso conecta a fila SQS à Lambda 10
+
+resource "aws_lambda_event_source_mapping" "sqs_trigger" {
+  event_source_arn = aws_sqs_queue.csv_export_queue.arn
+  function_name    = aws_lambda_function.process_export_lambda.arn
+  batch_size       = 1 # Processa uma mensagem de cada vez
 }

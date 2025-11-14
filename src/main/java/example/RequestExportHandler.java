@@ -38,9 +38,10 @@ public class RequestExportHandler implements RequestHandler<APIGatewayProxyReque
             // 1. Pega o listId da URL
             String listId = event.getPathParameters().get("listId");
 
-            // 2. O Authorizer do Cognito joga os "claims" direto no mapa 'authorizer'.
+            // 2. CORREÇÃO CRÍTICA: Pegamos o 'sub' (Subject) que é o ID único do usuário
+            // e é o que o ProcessExportHandler precisa para achar o email.
             Map<String, Object> authorizer = event.getRequestContext().getAuthorizer();
-            String userId = (String) authorizer.get("cognito:username");
+            String userId = (String) authorizer.get("sub"); // <-- CORRIGIDO PARA 'sub'
 
             // 3. Prepara a mensagem para a fila
             SqsMessage messagePayload = new SqsMessage(listId, userId);
