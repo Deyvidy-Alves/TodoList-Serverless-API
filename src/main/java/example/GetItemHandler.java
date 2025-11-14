@@ -25,6 +25,7 @@ public class GetItemHandler implements RequestHandler<APIGatewayProxyRequestEven
         this.tableName = System.getenv("TABLE_NAME");
     }
 
+    // Classe interna para formatar a resposta do item
     private static class ItemResponse {
         private String itemId;
         private String text;
