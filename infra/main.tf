@@ -258,6 +258,25 @@ resource "aws_lambda_function" "get_item_lambda" {
   }
 }
 
+# -(RequestExportHandler)Solicitar Exportação CSV
+
+resource "aws_lambda_function" "request_export_lambda" {
+  filename         = var.zip_path
+  function_name    = "${var.project_name}-RequestExport"
+  role             = aws_iam_role.lambda_exec_role.arn
+  handler          = "example.RequestExportHandler::handleRequest"
+  runtime          = var.lambda_runtime
+  source_code_hash = filebase64sha256(var.zip_path)
+  timeout          = 30
+
+  environment {
+    variables = {
+      # Passa a URL da fila SQS para a Lambda
+      SQS_QUEUE_URL = aws_sqs_queue.csv_export_queue.id
+    }
+  }
+}
+
 
 # api gateway
 
@@ -480,6 +499,24 @@ resource "aws_apigatewayv2_route" "get_item_route" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
 }
 
+# Solicitar Exportação
+
+# POST /lists/{listId}/export
+resource "aws_apigatewayv2_integration" "request_export_integration" {
+  api_id           = aws_apigatewayv2_api.http_api.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = aws_lambda_function.request_export_lambda.invoke_arn
+}
+
+resource "aws_apigatewayv2_route" "request_export_route" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /lists/{listId}/export"
+  target    = "integrations/${aws_apigatewayv2_integration.request_export_integration.id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
+}
+
 
 # Permissões para invocar as Lambdas
 resource "aws_lambda_permission" "api_gtw_permission_create" {
@@ -544,6 +581,14 @@ resource "aws_lambda_permission" "api_gtw_permission_get_item" {
   source_arn    = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*"
 }
 
+resource "aws_lambda_permission" "api_gtw_permission_request_export" {
+  statement_id  = "AllowAPIGatewayToInvokeRequestExport"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.request_export_lambda.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*"
+}
+
 # --- RECURSOS PARA O FLUXO DE EXPORTAÇÃO (CSV) ---
 
 # 1. Fila SQS para receber os pedidos de exportação
@@ -556,8 +601,6 @@ resource "aws_sqs_queue" "csv_export_queue" {
 
 # 2. Bucket S3 para armazenar os relatórios CSV gerados
 resource "aws_s3_bucket" "csv_export_bucket" {
-  # O nome do bucket precisa ser globalmente único.
-  # Se este der erro, adicione alguns números aleatórios no final.
   bucket = "${lower(var.project_name)}-csv-exports-bucket-deyvidy"
 
   tags = {
@@ -566,7 +609,6 @@ resource "aws_s3_bucket" "csv_export_bucket" {
 }
 
 # 3. Permissão pública de leitura para os objetos no bucket
-# Isso permite que qualquer pessoa com o link (que enviaremos por email) possa baixar o CSV.
 resource "aws_s3_bucket_public_access_block" "csv_export_bucket_public_access" {
   bucket = aws_s3_bucket.csv_export_bucket.id
 
