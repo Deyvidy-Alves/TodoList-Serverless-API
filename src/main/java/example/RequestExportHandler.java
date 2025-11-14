@@ -19,14 +19,12 @@ public class RequestExportHandler implements RequestHandler<APIGatewayProxyReque
 
     public RequestExportHandler() {
         this.sqsClient = SqsClient.builder().region(Region.SA_EAST_1).build();
-        // Pega a URL da fila SQS das variáveis de ambiente
         this.queueUrl = System.getenv("SQS_QUEUE_URL");
     }
 
-    // Classe interna para criar a mensagem que vai para a fila
     private static class SqsMessage {
         String listId;
-        String userId; // Precisamos do userId para buscar o email depois
+        String userId;
 
         SqsMessage(String listId, String userId) {
             this.listId = listId;
@@ -40,12 +38,10 @@ public class RequestExportHandler implements RequestHandler<APIGatewayProxyReque
             // 1. Pega o listId da URL
             String listId = event.getPathParameters().get("listId");
 
-            // 2. Pega o userId de dentro do token JWT (do Authorizer do Cognito)
-            // O Cognito insere os dados do usuário no contexto da requisição
+            // 2. --- ESTA É A CORREÇÃO ---
+            // O Authorizer do Cognito joga os "claims" direto no mapa 'authorizer'.
             Map<String, Object> authorizer = event.getRequestContext().getAuthorizer();
-            Map<String, Object> jwt = (Map<String, Object>) authorizer.get("jwt");
-            Map<String, String> claims = (Map<String, String>) jwt.get("claims");
-            String userId = claims.get("cognito:username");
+            String userId = (String) authorizer.get("cognito:username");
 
             // 3. Prepara a mensagem para a fila
             SqsMessage messagePayload = new SqsMessage(listId, userId);
@@ -59,7 +55,7 @@ public class RequestExportHandler implements RequestHandler<APIGatewayProxyReque
 
             sqsClient.sendMessage(sendMsgRequest);
 
-            // 5. Retorna 202 (Aceito) - uma resposta padrão para requisições assíncronas
+            // 5. Retorna 202 (Aceito)
             return new APIGatewayProxyResponseEvent()
                     .withStatusCode(202)
                     .withBody("{\"message\": \"Seu relatório está sendo processado. Você receberá por email em breve.\"}");
