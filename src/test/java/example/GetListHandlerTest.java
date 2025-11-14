@@ -73,4 +73,4 @@ public class GetListHandlerTest {
 
         assertEquals(404, response.getStatusCode());
     }
-} // <<-- Tenha certeza que esta chave final foi copiada!
+}

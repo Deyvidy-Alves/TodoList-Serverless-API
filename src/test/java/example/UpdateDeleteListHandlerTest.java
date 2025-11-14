@@ -8,7 +8,7 @@ import com.google.gson.Gson;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock; // <-- MUDANÇA
+import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
@@ -34,12 +34,11 @@ public class UpdateDeleteListHandlerTest {
     @Mock
     private LambdaLogger logger;
 
-    private UpdateDeleteListHandler handler; // <-- MUDANÇA
+    private UpdateDeleteListHandler handler;
 
     @BeforeEach
     void setUp() {
         when(context.getLogger()).thenReturn(logger);
-        // <<< MUDANÇA: Instanciamos o handler manualmente >>>
         handler = new UpdateDeleteListHandler(dynamoDbClient, "FakeTable");
     }
 

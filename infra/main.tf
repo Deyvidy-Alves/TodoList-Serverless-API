@@ -164,6 +164,24 @@ resource "aws_lambda_function" "list_items_lambda" {
   }
 }
 
+# --- LAMBDA 6: Excluir Item da Lista ---
+
+resource "aws_lambda_function" "delete_item_lambda" {
+  filename         = var.zip_path
+  function_name    = "${var.project_name}-DeleteItem"
+  role             = aws_iam_role.lambda_exec_role.arn
+  handler          = "example.DeleteItemHandler::handleRequest"
+  runtime          = var.lambda_runtime
+  source_code_hash = filebase64sha256(var.zip_path)
+  timeout          = 30
+
+  environment {
+    variables = {
+      TABLE_NAME = aws_dynamodb_table.todo_list_table.name
+    }
+  }
+}
+
 
 # --- API GATEWAY ---
 
@@ -334,6 +352,26 @@ resource "aws_apigatewayv2_route" "list_items_route" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
 }
 
+# --- Rota e Integração da API para Excluir Item ---
+
+# DELETE /lists/{listId}/items/{itemId}
+resource "aws_apigatewayv2_integration" "delete_item_integration" {
+  api_id           = aws_apigatewayv2_api.http_api.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = aws_lambda_function.delete_item_lambda.invoke_arn
+}
+
+resource "aws_apigatewayv2_route" "delete_item_route" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "DELETE /lists/{listId}/items/{itemId}"
+  target    = "integrations/${aws_apigatewayv2_integration.delete_item_integration.id}"
+
+  # Rota também protegida pelo Cognito
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
+}
+
+
 # Permissões para API Gateway invocar as Lambdas
 resource "aws_lambda_permission" "api_gtw_permission_create" {
   statement_id  = "AllowAPIGatewayToInvokeCreate"
@@ -369,6 +407,14 @@ resource "aws_lambda_permission" "api_gtw_permission_list_items" {
   statement_id  = "AllowAPIGatewayToInvokeListItems"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.list_items_lambda.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "api_gtw_permission_delete_item" {
+  statement_id  = "AllowAPIGatewayToInvokeDeleteItem"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.delete_item_lambda.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*"
 }
