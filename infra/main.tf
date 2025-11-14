@@ -182,6 +182,24 @@ resource "aws_lambda_function" "delete_item_lambda" {
   }
 }
 
+# --- LAMBDA 7: Atualizar Item da Lista ---
+
+resource "aws_lambda_function" "update_item_lambda" {
+  filename         = var.zip_path
+  function_name    = "${var.project_name}-UpdateItem"
+  role             = aws_iam_role.lambda_exec_role.arn
+  handler          = "example.UpdateItemHandler::handleRequest"
+  runtime          = var.lambda_runtime
+  source_code_hash = filebase64sha256(var.zip_path)
+  timeout          = 30
+
+  environment {
+    variables = {
+      TABLE_NAME = aws_dynamodb_table.todo_list_table.name
+    }
+  }
+}
+
 
 # --- API GATEWAY ---
 
@@ -352,6 +370,24 @@ resource "aws_apigatewayv2_route" "list_items_route" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
 }
 
+# --- Rota e Integração da API para Atualizar Item ---
+
+# PUT /lists/{listId}/items/{itemId}
+resource "aws_apigatewayv2_integration" "update_item_integration" {
+  api_id           = aws_apigatewayv2_api.http_api.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = aws_lambda_function.update_item_lambda.invoke_arn
+}
+
+resource "aws_apigatewayv2_route" "update_item_route" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "PUT /lists/{listId}/items/{itemId}"
+  target    = "integrations/${aws_apigatewayv2_integration.update_item_integration.id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
+}
+
 # --- Rota e Integração da API para Excluir Item ---
 
 # DELETE /lists/{listId}/items/{itemId}
@@ -415,6 +451,14 @@ resource "aws_lambda_permission" "api_gtw_permission_delete_item" {
   statement_id  = "AllowAPIGatewayToInvokeDeleteItem"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.delete_item_lambda.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "api_gtw_permission_update_item" {
+  statement_id  = "AllowAPIGatewayToInvokeUpdateItem"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.update_item_lambda.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*"
 }
