@@ -668,12 +668,3 @@ resource "aws_s3_bucket_policy" "csv_export_bucket_policy" {
 resource "aws_ses_email_identity" "email_sender" {
   email = "deyvidyalves03@gmail.com"
 }
-
-# --- Gatilho SQS -> Lambda ---
-# Isso conecta a fila SQS à Lambda 10
-
-resource "aws_lambda_event_source_mapping" "sqs_trigger" {
-  event_source_arn = aws_sqs_queue.csv_export_queue.arn
-  function_name    = aws_lambda_function.process_export_lambda.arn
-  batch_size       = 1 # Processa uma mensagem de cada vez
-}
