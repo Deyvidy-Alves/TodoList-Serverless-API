@@ -47,8 +47,7 @@ resource "aws_iam_role" "lambda_exec_role" {
   })
 }
 
-# --- CORREÇÃO FEITA AQUI ---
-# Esta política agora tem um novo nome e inclui permissões para SQS, S3, Cognito e SES
+# --- Política IAM única para todas as permissões ---
 resource "aws_iam_policy" "lambda_policy" {
   name        = "${var.project_name}-lambda-policy"
   description = "Política que permite à Lambda acessar DynamoDB, SQS, S3, Cognito e SES"
@@ -109,11 +108,10 @@ resource "aws_iam_role_policy_attachment" "lambda_logs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# --- CORREÇÃO FEITA AQUI ---
-# Anexa a nova política (lambda_policy) em vez da antiga (dynamodb_policy)
+# Anexa a nova política única
 resource "aws_iam_role_policy_attachment" "dynamodb_attachment" {
   role       = aws_iam_role.lambda_exec_role.name
-  policy_arn = aws_iam_policy.lambda_policy.arn # <-- Alterado de dynamodb_policy.arn
+  policy_arn = aws_iam_policy.lambda_policy.arn
 }
 
 
@@ -523,28 +521,8 @@ resource "aws_apigatewayv2_route" "get_item_route" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
 }
 
-# --- LAMBDA 10: Processar Exportação CSV (Acionada pela SQS) ---
 
-resource "aws_lambda_function" "process_export_lambda" {
-  filename         = var.zip_path
-  function_name    = "${var.project_name}-ProcessExport"
-  role             = aws_iam_role.lambda_exec_role.arn
-  handler          = "example.ProcessExportHandler::handleRequest"
-  runtime          = var.lambda_runtime
-  source_code_hash = filebase64sha256(var.zip_path)
-  timeout          = 300 #(mesmo tempo do SQS)
-
-  environment {
-    variables = {
-      TABLE_NAME   = aws_dynamodb_table.todo_list_table.name
-      BUCKET_NAME  = aws_s3_bucket.csv_export_bucket.id
-      USER_POOL_ID = aws_cognito_user_pool.user_pool.id
-      SENDER_EMAIL = aws_ses_email_identity.email_sender.email
-    }
-  }
-}
-
-# Solicitar Exportação
+# --- Rota da API para Solicitar Exportação ---
 
 # POST /lists/{listId}/export
 resource "aws_apigatewayv2_integration" "request_export_integration" {
