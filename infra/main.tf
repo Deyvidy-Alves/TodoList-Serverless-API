@@ -612,13 +612,7 @@ resource "aws_lambda_permission" "api_gtw_permission_request_export" {
   source_arn    = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*"
 }
 
-resource "aws_lambda_event_source_mapping" "sqs_trigger" {
-  event_source_arn = aws_sqs_queue.csv_export_queue.arn
-  function_name    = aws_lambda_function.process_export_lambda.arn
-  batch_size       = 1 # Processa uma mensagem de cada vez
-}
 
-# --- RECURSOS PARA O FLUXO DE EXPORTAÇÃO (CSV) ---
 
 # 1. Fila SQS para receber os pedidos de exportação
 resource "aws_sqs_queue" "csv_export_queue" {
