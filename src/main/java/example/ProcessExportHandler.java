@@ -23,7 +23,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-// processa a mensagem da fila SQS
 public class ProcessExportHandler implements RequestHandler<SQSEvent, Void> {
 
     private final DynamoDbClient dynamoDbClient;
@@ -60,31 +59,32 @@ public class ProcessExportHandler implements RequestHandler<SQSEvent, Void> {
         for (SQSEvent.SQSMessage msg : event.getRecords()) {
             try {
                 String messageBody = msg.getBody();
+                context.getLogger().log("Processando mensagem: " + messageBody);
                 SqsMessage request = gson.fromJson(messageBody, SqsMessage.class);
 
-                // verifica se userId não é NULL antes de chamar o cognito
                 if (request.userId == null || request.userId.trim().isEmpty()) {
-                    context.getLogger().log("ERRO: userId está nulo ou vazio na mensagem. Pulando processamento.");
+                    context.getLogger().log("ALERTA: userId está NULL na mensagem. Pulando chamada ao Cognito/SES.");
                     continue;
                 }
 
-                // Busca os dados da lista no DynamoDB
+                // busca os dados da lista no DynamoDB
                 List<Map<String, AttributeValue>> items = getItemsFromDynamoDB(request.listId);
 
-                // Gera o CSV e salva no S3
+                // gera o CSV e salva no S3
                 String csvContent = generateCsv(items);
                 String csvFileName = "relatorio-" + request.listId + "-" + Instant.now().toEpochMilli() + ".csv";
                 String s3Url = saveCsvToS3(csvContent, csvFileName);
 
-                // Busca o email do usuário no Cognito
+                // busca o email do usuário no Cognito
                 String userEmail = getUserEmail(request.userId);
 
-                // Envia o email
+                // envia o email
                 sendEmail(userEmail, s3Url);
                 context.getLogger().log("SUCESSO: Email enviado para: " + userEmail);
 
             } catch (Exception e) {
                 context.getLogger().log("ERRO CRÍTICO NO PROCESSAMENTO: " + e.getMessage());
+                // Lança a exceção para que a SQS tente de novo.
                 throw new RuntimeException("Falha ao processar mensagem SQS", e);
             }
         }
@@ -98,7 +98,9 @@ public class ProcessExportHandler implements RequestHandler<SQSEvent, Void> {
                 .keyConditionExpression("pk = :pkVal")
                 .expressionAttributeValues(Map.of(":pkVal", AttributeValue.builder().s(pk).build()))
                 .build();
-        return dynamoDbClient.query(queryRequest).items();
+
+        QueryResponse response = dynamoDbClient.query(queryRequest);
+        return response.items();
     }
 
     private String generateCsv(List<Map<String, AttributeValue>> items) {
