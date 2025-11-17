@@ -657,6 +657,14 @@ resource "aws_s3_bucket_policy" "csv_export_bucket_policy" {
   })
 }
 
+resource "aws_lambda_permission" "allow_sqs_invocation" {
+  statement_id  = "AllowSQSToInvokeProcessExport"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.process_export_lambda.function_name
+  principal     = "sqs.amazonaws.com"
+  source_arn    = aws_sqs_queue.csv_export_queue.arn
+}
+
 
 # a AWS envia email de verificação
 resource "aws_ses_email_identity" "email_sender" {
