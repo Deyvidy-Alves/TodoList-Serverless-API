@@ -25,7 +25,7 @@ public class GetItemHandler implements RequestHandler<APIGatewayProxyRequestEven
         this.tableName = System.getenv("TABLE_NAME");
     }
 
-    // Classe interna para formatar a resposta do item
+    // classe interna para formatar a resposta do item
     private static class ItemResponse {
         private String itemId;
         private String text;
@@ -33,7 +33,6 @@ public class GetItemHandler implements RequestHandler<APIGatewayProxyRequestEven
         private boolean completed;
 
         public ItemResponse(Map<String, AttributeValue> item) {
-            // ESTA PARTE É A QUE ESTÁ CORRIGIDA
             this.itemId = item.get("itemId").s();
             this.text = item.get("text").s();
             this.createdAt = item.get("createdAt").s();

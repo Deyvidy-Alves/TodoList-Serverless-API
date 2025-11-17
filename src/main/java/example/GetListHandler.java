@@ -30,7 +30,7 @@ public class GetListHandler implements RequestHandler<APIGatewayProxyRequestEven
         this.tableName = tableName;
     }
 
-    // Classe interna para formatar a resposta JSON
+    // classe interna para formatar a resposta JSON
     private static class ListResponse {
         private String userId;
         private String listId;
@@ -68,7 +68,6 @@ public class GetListHandler implements RequestHandler<APIGatewayProxyRequestEven
 
             Map<String, AttributeValue> item = response.item();
 
-            // Montamos nosso objeto de resposta limpo
             ListResponse listResponse = new ListResponse(
                     item.get("userId").s(),
                     item.get("sk").s().replace("LIST#", ""), // Extrai o ID do SK
@@ -76,7 +75,7 @@ public class GetListHandler implements RequestHandler<APIGatewayProxyRequestEven
                     item.get("createdAt").s()
             );
 
-            // Convertemos o objeto de resposta para JSON
+            // converte o objeto de resposta para JSON
             return new APIGatewayProxyResponseEvent().withStatusCode(200).withBody(gson.toJson(listResponse));
 
         } catch (Exception e) {

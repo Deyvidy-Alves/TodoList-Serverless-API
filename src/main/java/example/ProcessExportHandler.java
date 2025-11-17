@@ -62,7 +62,7 @@ public class ProcessExportHandler implements RequestHandler<SQSEvent, Void> {
                 String messageBody = msg.getBody();
                 SqsMessage request = gson.fromJson(messageBody, SqsMessage.class);
 
-                // 2. verifica se userId não é NULL antes de chamar o cognito
+                // verifica se userId não é NULL antes de chamar o cognito
                 if (request.userId == null || request.userId.trim().isEmpty()) {
                     context.getLogger().log("ERRO: userId está nulo ou vazio na mensagem. Pulando processamento.");
                     continue;

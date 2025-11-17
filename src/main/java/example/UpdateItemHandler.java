@@ -24,7 +24,7 @@ public class UpdateItemHandler implements RequestHandler<APIGatewayProxyRequestE
         this.tableName = System.getenv("TABLE_NAME");
     }
 
-    // Classe interna para o corpo da requisição
+    // classe interna para o corpo da requisição
     private static class InputData {
         private String text;
         private Boolean completed; // Permite atualizar o texto ou o status
@@ -36,22 +36,18 @@ public class UpdateItemHandler implements RequestHandler<APIGatewayProxyRequestE
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent event, Context context) {
         try {
-            // 1. Extrai os IDs da URL
+
             String listId = event.getPathParameters().get("listId");
             String itemId = event.getPathParameters().get("itemId");
 
-            // 2. Extrai os dados do corpo
             InputData input = gson.fromJson(event.getBody(), InputData.class);
 
-            // 3. Define a chave do item a ser atualizado
             String pk = "LIST#" + listId;
             String sk = "ITEM#" + itemId;
             Map<String, AttributeValue> keyToUpdate = new HashMap<>();
             keyToUpdate.put("pk", AttributeValue.builder().s(pk).build());
             keyToUpdate.put("sk", AttributeValue.builder().s(sk).build());
 
-            // 4. Monta a expressão de atualização dinamicamente
-            //    Isso permite atualizar o texto, o status de "completed", ou ambos
             String updateExpression = "SET ";
             Map<String, String> expressionAttributeNames = new HashMap<>();
             Map<String, AttributeValue> expressionAttributeValues = new HashMap<>();
@@ -68,10 +64,8 @@ public class UpdateItemHandler implements RequestHandler<APIGatewayProxyRequestE
                 expressionAttributeValues.put(":newCompleted", AttributeValue.builder().bool(input.isCompleted()).build());
             }
 
-            // Remove a vírgula e o espaço extras do final
             updateExpression = updateExpression.substring(0, updateExpression.length() - 2);
 
-            // 5. Constrói e executa a requisição de atualização
             UpdateItemRequest updateReq = UpdateItemRequest.builder()
                     .tableName(this.tableName)
                     .key(keyToUpdate)

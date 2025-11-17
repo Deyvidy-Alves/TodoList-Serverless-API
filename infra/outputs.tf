@@ -10,7 +10,7 @@ output "api_invoke_url" {
   value       = aws_apigatewayv2_stage.default.invoke_url
 }
 
-# --- ADICIONADO: Outputs para o Cognito ---
+# outputs para o Cognito
 
 output "cognito_user_pool_id" {
   description = "O ID do Cognito User Pool."

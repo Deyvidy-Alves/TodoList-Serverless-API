@@ -20,13 +20,13 @@ public class CreateListHandler implements RequestHandler<APIGatewayProxyRequestE
     private final String tableName;
     private final Gson gson = new Gson();
 
-    // Construtor para a Lambda
+    // construtor para a Lambda
     public CreateListHandler() {
         this.dynamoDbClient = DynamoDbClient.builder().region(Region.SA_EAST_1).build();
         this.tableName = System.getenv("TABLE_NAME");
     }
 
-    // <<< MUDANÇA: Construtor para os Testes >>>
+    // construtor para os teste
     public CreateListHandler(DynamoDbClient dynamoDbClient, String tableName) {
         this.dynamoDbClient = dynamoDbClient;
         this.tableName = tableName;
@@ -34,7 +34,6 @@ public class CreateListHandler implements RequestHandler<APIGatewayProxyRequestE
 
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent event, Context context) {
-        // ... o resto do código permanece igual
         try {
             String userId = event.getPathParameters().get("userId");
             InputData inputData = gson.fromJson(event.getBody(), InputData.class);

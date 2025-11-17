@@ -44,11 +44,9 @@ public class ListItemsHandler implements RequestHandler<APIGatewayProxyRequestEv
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent event, Context context) {
         try {
-            //  Extrai o ID da lista dos parâmetros da URL
             String listId = event.getPathParameters().get("listId");
             String pk = "LIST#" + listId;
 
-            //    A query busca todos os itens que têm a mesma Chave de Partição
             QueryRequest queryRequest = QueryRequest.builder()
                     .tableName(this.tableName)
                     .keyConditionExpression("pk = :pkVal")
@@ -57,7 +55,7 @@ public class ListItemsHandler implements RequestHandler<APIGatewayProxyRequestEv
 
             QueryResponse response = dynamoDbClient.query(queryRequest);
 
-            // Transforma a lista de itens do DynamoDB em uma lista de objetos de resposta limpos
+            // transforma a lista de itens do DynamoDB em uma lista de objetos de resposta limpos
             List<ItemResponse> items = response.items().stream()
                     .map(ItemResponse::new)
                     .collect(Collectors.toList());

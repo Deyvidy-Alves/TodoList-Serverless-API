@@ -25,11 +25,11 @@ public class DeleteItemHandler implements RequestHandler<APIGatewayProxyRequestE
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent event, Context context) {
         try {
-            // 1. Extrai os IDs da URL
+            // extrai os IDs da URL
             String listId = event.getPathParameters().get("listId");
             String itemId = event.getPathParameters().get("itemId");
 
-            // 2. Define a chave composta exata do item a ser apagado
+            // define a chave composta exata do item a ser apagado
             String pk = "LIST#" + listId;
             String sk = "ITEM#" + itemId;
 
@@ -37,7 +37,7 @@ public class DeleteItemHandler implements RequestHandler<APIGatewayProxyRequestE
             keyToDelete.put("pk", AttributeValue.builder().s(pk).build());
             keyToDelete.put("sk", AttributeValue.builder().s(sk).build());
 
-            // 3. Cria e executa a requisição de exclusão
+            // cria e executa a requisição de exclusão
             DeleteItemRequest deleteReq = DeleteItemRequest.builder()
                     .tableName(this.tableName)
                     .key(keyToDelete)
@@ -45,7 +45,6 @@ public class DeleteItemHandler implements RequestHandler<APIGatewayProxyRequestE
 
             dynamoDbClient.deleteItem(deleteReq);
 
-            // 4. Retorna sucesso (204 No Content é comum para DELETE, mas 200 com mensagem também é bom)
             return new APIGatewayProxyResponseEvent()
                     .withStatusCode(200)
                     .withBody("{\"message\": \"Item excluído com sucesso!\"}");

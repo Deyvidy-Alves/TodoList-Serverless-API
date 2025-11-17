@@ -26,7 +26,7 @@ public class CreateItemHandler implements RequestHandler<APIGatewayProxyRequestE
         this.tableName = System.getenv("TABLE_NAME");
     }
 
-    // Classe interna para desserializar o corpo da requisição JSON
+    // classe interna para desserializar o corpo da requisição JSON
     private static class InputData {
         private String text;
         public String getText() { return text; }
@@ -48,9 +48,7 @@ public class CreateItemHandler implements RequestHandler<APIGatewayProxyRequestE
 
             String itemId = UUID.randomUUID().toString();
 
-            // 4. Define o modelo de dados para o item da lista
-            //    PK = LIST#{listId} nos permite buscar todos os itens de uma lista de uma vez
-            //    SK = ITEM#{itemId} garante a unicidade de cada item
+            // define o modelo de dados para o item da lista
             String pk = "LIST#" + listId;
             String sk = "ITEM#" + itemId;
 

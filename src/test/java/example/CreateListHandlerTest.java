@@ -8,7 +8,7 @@ import com.google.gson.Gson;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock; // <-- MUDANÇA: Removido InjectMocks
+import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
@@ -34,12 +34,11 @@ public class CreateListHandlerTest {
     @Mock
     private LambdaLogger logger;
 
-    private CreateListHandler handler; // <-- MUDANÇA: Removido @InjectMocks
+    private CreateListHandler handler;
 
     @BeforeEach
     void setUp() {
         when(context.getLogger()).thenReturn(logger);
-        // <<< MUDANÇA: Instanciamos o handler manualmente com o nome da tabela >>>
         handler = new CreateListHandler(dynamoDbClient, "FakeTable");
     }
 

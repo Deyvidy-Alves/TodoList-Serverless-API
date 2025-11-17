@@ -25,13 +25,11 @@ public class UpdateDeleteListHandler implements RequestHandler<APIGatewayProxyRe
         this.tableName = System.getenv("TABLE_NAME");
     }
 
-    // <<< MUDANÇA: Construtor para os Testes >>>
     public UpdateDeleteListHandler(DynamoDbClient dynamoDbClient, String tableName) {
         this.dynamoDbClient = dynamoDbClient;
         this.tableName = tableName;
     }
 
-    // ... o resto do código permanece igual
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent event, Context context) {
         String httpMethod = event.getHttpMethod();

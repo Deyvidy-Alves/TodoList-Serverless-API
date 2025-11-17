@@ -35,19 +35,17 @@ public class RequestExportHandler implements RequestHandler<APIGatewayProxyReque
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent event, Context context) {
         try {
-            // 1. Pega o listId da URL
+            // ppega o listId da URL
             String listId = event.getPathParameters().get("listId");
 
-            // 2. CORREÇÃO CRÍTICA: Pegamos o 'sub' (Subject) que é o ID único do usuário
-            // e é o que o ProcessExportHandler precisa para achar o email.
             Map<String, Object> authorizer = event.getRequestContext().getAuthorizer();
             String userId = (String) authorizer.get("sub"); // <-- CORRIGIDO PARA 'sub'
 
-            // 3. Prepara a mensagem para a fila
+            // prepara a mensagem para a fila
             SqsMessage messagePayload = new SqsMessage(listId, userId);
             String messageBody = gson.toJson(messagePayload);
 
-            // 4. Envia a mensagem para a fila SQS
+            // envia a mensagem para a fila SQS
             SendMessageRequest sendMsgRequest = SendMessageRequest.builder()
                     .queueUrl(this.queueUrl)
                     .messageBody(messageBody)
@@ -55,7 +53,6 @@ public class RequestExportHandler implements RequestHandler<APIGatewayProxyReque
 
             sqsClient.sendMessage(sendMsgRequest);
 
-            // 5. Retorna 202 (Aceito)
             return new APIGatewayProxyResponseEvent()
                     .withStatusCode(202)
                     .withBody("{\"message\": \"Seu relatório está sendo processado. Você receberá por email em breve.\"}");

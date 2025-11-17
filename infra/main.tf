@@ -12,7 +12,7 @@ provider "aws" {
   region = var.aws_region
 }
 
-# Implementações de IAM role e DynamoDB
+# implementações de IAM role e DynamoDB
 
 resource "aws_dynamodb_table" "todo_list_table" {
   name         = var.dynamodb_table_name
@@ -47,7 +47,7 @@ resource "aws_iam_role" "lambda_exec_role" {
   })
 }
 
-# --- Política IAM única para todas as permissões ---
+# política IAM única para todas as permissões
 resource "aws_iam_policy" "lambda_policy" {
   name        = "${var.project_name}-lambda-policy"
   description = "Política que permite à Lambda acessar DynamoDB, SQS, S3, Cognito e SES"
@@ -64,7 +64,7 @@ resource "aws_iam_policy" "lambda_policy" {
         Resource = aws_dynamodb_table.todo_list_table.arn
       },
       {
-        # Permissão para a Fila SQS (Enviar, Receber, Apagar)
+        # permissão para a Fila SQS enviar, receber e apagar
         Action = [
           "sqs:SendMessage",
           "sqs:ReceiveMessage",
@@ -75,7 +75,7 @@ resource "aws_iam_policy" "lambda_policy" {
         Resource = aws_sqs_queue.csv_export_queue.arn
       },
       {
-        # Permissão para o Bucket S3
+        # P7permissão para o Bucket S3
         Action = [
           "s3:PutObject",
           "s3:GetObject"
@@ -84,7 +84,7 @@ resource "aws_iam_policy" "lambda_policy" {
         Resource = "${aws_s3_bucket.csv_export_bucket.arn}/*"
       },
       {
-        # Permissão para o Cognito (buscar email do usuário)
+        # permissão para o Cognito buscar email do usuário
         Action = [
           "cognito-idp:AdminGetUser"
         ],
@@ -92,7 +92,7 @@ resource "aws_iam_policy" "lambda_policy" {
         Resource = aws_cognito_user_pool.user_pool.arn
       },
       {
-        # Permissão para o SES (enviar email)
+        # permissão para o SES enviar email
         Action = [
           "ses:SendEmail"
         ],
@@ -259,7 +259,7 @@ resource "aws_lambda_function" "get_item_lambda" {
   }
 }
 
-# -(RequestExportHandler)Solicitar Exportação CSV
+# (RequestExportHandler)Solicitar Exportação CSV
 
 resource "aws_lambda_function" "request_export_lambda" {
   filename         = var.zip_path
@@ -278,7 +278,7 @@ resource "aws_lambda_function" "request_export_lambda" {
   }
 }
 
-# --- LAMBDA 10: Processar Exportação CSV (Acionada pela SQS) ---
+# (ProcessExportHandler)Processar Exportação CSV
 
 resource "aws_lambda_function" "process_export_lambda" {
   filename         = var.zip_path
@@ -322,7 +322,7 @@ resource "aws_apigatewayv2_stage" "default" {
   auto_deploy = true
 }
 
-# Autenticação de usuário
+# autenticação de usuário
 
 resource "aws_cognito_user_pool" "user_pool" {
   name = "${var.project_name}-user-pool"
@@ -373,7 +373,7 @@ resource "aws_apigatewayv2_authorizer" "cognito_authorizer" {
 }
 
 
-#  Rotas
+# rotas
 
 # POST /users/{userId}/lists
 resource "aws_apigatewayv2_integration" "create_list_integration" {
@@ -467,7 +467,7 @@ resource "aws_apigatewayv2_route" "list_items_route" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
 }
 
-# Atualizar item
+# atualizar item
 
 # PUT /lists/{listId}/items/{itemId}
 resource "aws_apigatewayv2_integration" "update_item_integration" {
@@ -485,7 +485,7 @@ resource "aws_apigatewayv2_route" "update_item_route" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
 }
 
-# Excluir Item
+# excluir Item
 
 # DELETE /lists/{listId}/items/{itemId}
 resource "aws_apigatewayv2_integration" "delete_item_integration" {
@@ -503,7 +503,7 @@ resource "aws_apigatewayv2_route" "delete_item_route" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito_authorizer.id
 }
 
-# Obter item específico
+# obter item específico
 
 # GET /lists/{listId}/items/{itemId}
 resource "aws_apigatewayv2_integration" "get_item_integration" {
@@ -522,7 +522,7 @@ resource "aws_apigatewayv2_route" "get_item_route" {
 }
 
 
-# --- Rota da API para Solicitar Exportação ---
+# Rota da API para solicitar exportação
 
 # POST /lists/{listId}/export
 resource "aws_apigatewayv2_integration" "request_export_integration" {
@@ -541,7 +541,7 @@ resource "aws_apigatewayv2_route" "request_export_route" {
 }
 
 
-# Permissões para invocar as Lambdas
+# permissões para invocar as Lambdas
 resource "aws_lambda_permission" "api_gtw_permission_create" {
   statement_id  = "AllowAPIGatewayToInvokeCreate"
   action        = "lambda:InvokeFunction"
@@ -614,7 +614,7 @@ resource "aws_lambda_permission" "api_gtw_permission_request_export" {
 
 
 
-# 1. Fila SQS para receber os pedidos de exportação
+# ffila SQS para receber os pedidos de exportação
 resource "aws_sqs_queue" "csv_export_queue" {
   name = "${var.project_name}-csv-export-queue"
 
@@ -631,7 +631,7 @@ resource "aws_s3_bucket" "csv_export_bucket" {
   }
 }
 
-# 3. Permissão pública de leitura para os objetos no bucket
+# permissão de leitura para os objetos no bucket
 resource "aws_s3_bucket_public_access_block" "csv_export_bucket_public_access" {
   bucket = aws_s3_bucket.csv_export_bucket.id
 
@@ -658,7 +658,7 @@ resource "aws_s3_bucket_policy" "csv_export_bucket_policy" {
 }
 
 
-# A AWS enviará um email de verificação para este endereço.
+# a AWS envia email de verificação
 resource "aws_ses_email_identity" "email_sender" {
   email = "deyvidyalves03@gmail.com"
 }
