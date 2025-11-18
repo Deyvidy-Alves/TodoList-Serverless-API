@@ -35,17 +35,23 @@ public class RequestExportHandler implements RequestHandler<APIGatewayProxyReque
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent event, Context context) {
         try {
-            // ppega o listId da URL
             String listId = event.getPathParameters().get("listId");
 
             Map<String, Object> authorizer = event.getRequestContext().getAuthorizer();
-            String userId = (String) authorizer.get("sub"); // <-- CORRIGIDO PARA 'sub'
+            String userId = (String) authorizer.get("sub");
 
-            // prepara a mensagem para a fila
+            if (userId == null || userId.isEmpty()) {
+                userId = (String) authorizer.get("cognito:username");
+                if (userId == null || userId.isEmpty()) {
+                    context.getLogger().log("ERRO DE AUTORIZACAO: Não foi possível obter o ID do usuário.");
+                    return new APIGatewayProxyResponseEvent().withStatusCode(401).withBody("{\"error\": \"Usuário não autenticado ou token inválido.\"}");
+                }
+            }
+
+
             SqsMessage messagePayload = new SqsMessage(listId, userId);
             String messageBody = gson.toJson(messagePayload);
 
-            // envia a mensagem para a fila SQS
             SendMessageRequest sendMsgRequest = SendMessageRequest.builder()
                     .queueUrl(this.queueUrl)
                     .messageBody(messageBody)
