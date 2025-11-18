@@ -1,188 +1,120 @@
-# API Serverless para Lista de Tarefas (To-Do List)
+# 📚 API Serverless para Lista de Tarefas (To-Do List)
 
-## 1. Visão Geral
+## 1. Visão Geral do Projeto
 
-Este projeto implementa uma API serverless completa para uma aplicação de "To-Do List". Toda a infraestrutura na AWS é provisionada e gerenciada como código utilizando Terraform, garantindo automação, repetibilidade e segurança.
+Este projeto implementa uma API serverless completa de To-Do List. Toda a infraestrutura é gerenciada via **Terraform (Infrastructure as Code - IaC)** e o código de negócio é escrito em **Java 21 (AWS Lambda)**.
 
-A aplicação consiste em uma API REST que permite aos usuários criar, listar, editar e apagar listas de tarefas (CRUD). A lógica de negócio é executada por uma função AWS Lambda (Java) e os dados são persistidos em uma tabela Amazon DynamoDB, seguindo as melhores práticas de design de dados NoSQL (Single Table Design).
+O projeto é dividido em dois fluxos principais, demonstrando uma arquitetura desacoplada e robusta:
+1.  **Síncrono (CRUD):** Operações imediatas para manipulação de listas e itens.
+2.  **Assíncrono (CSV Export):** Um fluxo de processamento em segundo plano para gerar relatórios e enviá-los por e-mail, utilizando filas de mensagens (SQS).
 
-## 2. Arquitetura
+A estabilidade é garantida por um pipeline de **Entrega Contínua (CI/CD)**.
+
+---
+## 2. Arquitetura e Componentes
 
 A arquitetura é 100% serverless, utilizando os seguintes serviços da AWS:
 
-```mermaid
-graph TD
-    subgraph Cliente
-        A[Postman / Front-End]
-    end
+| Serviço AWS | Função |
+| :--- | :--- |
+| **AWS Lambda (10 Funções)** | Lógica de negócio (Java 21) e processamento assíncrono. |
+| **AWS Cognito** | Autorizador JWT para proteger todos os endpoints da API. |
+| **Amazon DynamoDB** | Persistência de listas e itens (Single-Table Design). |
+| **Amazon SQS** | Fila de mensagens para desacoplar a solicitação de relatório do processamento (lento). |
+| **Amazon S3** | Armazenamento de relatórios CSV gerados. |
+| **Amazon SES** | Serviço de e-mail utilizado para entregar o relatório final ao usuário (e-mail verificado: `deyvidyalves03@gmail.com`). |
+| **API Gateway (HTTP API)** | Exposição pública dos endpoints REST. |
 
-    subgraph "AWS API Gateway (REST API)"
-        B("POST /v1/lists")
-        C("GET /v1/lists")
-        D("PUT /v1/lists/{listId}")
-        H("DELETE /v1/lists/{listId}")
-    end
+---
+## 3. Modelo de Dados (Single-Table Design)
 
-    subgraph "AWS Lambda"
-        E{Função Principal (Java)}
-    end
+A tabela `TodoList` utiliza um design otimizado para consultas diretas:
 
-    subgraph "Amazon DynamoDB"
-        F[(Tabela: TodoList)]
-        G[GSI1: Índice Secundo Global]
-    end
+| Entidade | PK (Chave de Partição) | SK (Chave de Ordenação) |
+| :--- | :--- | :--- |
+| **Lista** | `USER#<userId>` | `LIST#<listId>` |
+| **Item/Tarefa** | `LIST#<listId>` | `ITEM#<itemId>` |
 
-    A --> B & C & D & H
+---
+## 4. Pipeline de CI/CD (GitHub Actions)
 
-    B --> E
-    C --> E
-    D --> E
-    H --> E
+O deploy é automatizado através de um workflow no GitHub Actions.
 
-    E --> F
-    F -- "Query para Listagem" --> G
-```
+#### **Fluxo de Deploy**
+* **CI (Integração Contínua):** Toda vez que um Pull Request é aberto para a branch `develop`, o pipeline compila o código e executa o `terraform plan`.
+* **CD (Entrega Contínua):** O deploy é acionado automaticamente pelo `push` (merge) na branch `develop`, executando o `terraform apply`.
 
-## 3. Modelo de Dados - Single Table Design
+#### **Alinhamento de Versões**
+* **Desenvolvimento Local:** Java JDK 21
+* **Runtime Lambda (AWS):** `java21` (Definido no Terraform)
 
-A tabela `TodoList` utiliza o padrão Single Table Design para otimizar as consultas.
+---
+## 5. Guia de Teste e Uso da API
 
-| Entidade | PK (Chave de Partição) | SK (Chave de Ordenação) | GSI1PK | GSI1SK | Atributos Adicionais |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Lista** | `USER#<userId>` | `LIST#<listId>` | `LISTS` | `METADATA#<listId>` | `listName`, `createdAt` |
-| **Tarefa** | `USER#<userId>` | `LIST#<listId>#TASK#<taskId>` | - | - | `taskDescription`, `isComplete` |
+A URL base da API (`<api-url>`) é fornecida na saída do `terraform apply`. Todas as requisições **exigem autenticação**.
 
-* **GSI1 (Global Secondary Index):** Permite a consulta `Query(GSI1PK = "LISTS")` para obter todas as listas de forma eficiente, atendendo ao requisito de "NÃO UTILIZAR SCAN".
+### **5.1. Obter Token de Autenticação (JWT)**
 
-## 4. Roadmap de Desenvolvimento![img.png](img.png)
+Você deve gerar um novo token JWT toda vez que o antigo expirar (dura 1 hora).
 
-- [x] **Spike Terraform:** Estudo dos comandos e armazenamento de estado no S3.
-- [x] **Spike Lambda via Terraform:** Criação de uma função Lambda "Hello World".
-- [x] **Criar DynamoDB via Terraform:** Criação da tabela `TodoList` com `PK`, `SK` e GSI.
-- [x] **Subir ApiGateway via terraform (REST API V1):** Implantação da API Gateway base.
-- [x] **Estória: Cadastrar uma lista (`POST /lists`):** Implementada e testada.
-- [x] **Estória: Listar todas as listas (`GET /lists`):** Implementada e testada.
-- [x] **Estória: Editar uma lista (`PUT /lists/{listId}`):** Implementada e testada.
-- [x] **Estória: Apagar uma lista (`DELETE /lists/{listId}`):** Implementada e testada.
-- [x] **Qualidade:** Adicionar cobertura de testes unitários para todas as operações do CRUD.
-- [ ] **Refatoração:** Converter recursos para Módulos Terraform reutilizáveis (próximo passo sugerido).
+* **Comando CLI:**
+    ```bash
+    aws cognito-idp initiate-auth --auth-flow USER_PASSWORD_AUTH --client-id "28229sdm71m3s9hj4j35rgql84" --auth-parameters USERNAME="deyvidy",PASSWORD="SuperSenha#2025"
+    ```
+* **Uso:** O valor do `IdToken` é colado no cabeçalho `Authorization: Bearer <TOKEN_LIMPO>`.
 
-## 5. Guia de Instalação e Deploy
+### **5.2. Teste do Fluxo de Exportação CSV (Assíncrono)**
+
+Este é o teste de ponta a ponta que valida SQS, S3, SES e as Lambdas.
+
+| # | Ação | Método | Endpoint (Exemplo) | Resultado Esperado |
+| :--- | :--- | :--- | :--- | :--- |
+| **1** | **Disparar Exportação** | `POST` | `<api-url>/lists/<listId>/export` | **202 Accepted** (Pedido aceito pela fila SQS). |
+| **2** | **Verificação Final** | | **Checar Caixa de Entrada (Email)** | Recebimento do e-mail com o link público do CSV (via S3). |
+
+### **5.3. Teste do CRUD de Itens (GET Específico)**
+
+| Endpoint | Método | Descrição |
+| :--- | :--- | :--- |
+| `/lists/{listId}/items/{itemId}` | **GET** | Busca um item específico. |
+
+* **Exemplo (`curl` - substitua IDs e TOKEN):**
+    ```bash
+    curl -X GET '<api-url>/lists/46304619-.../items/5824cefb-...' \
+      -H 'Authorization: Bearer <TOKEN_FRESCO>'
+    ```
+* **Resultado esperado:** `200 OK` com o JSON do item específico.
+
+---
+## 6. Guia de Instalação e Deploy
 
 #### **Pré-requisitos**
 
 * [AWS CLI](https://aws.amazon.com/cli/) (`aws configure`)
 * [Terraform](https://www.terraform.io/downloads.html)
-* [Java JDK](https://www.oracle.com/java/technologies/downloads/) (v17+)
+* **Java JDK 21**
 * [Apache Maven](https://maven.apache.org/download.cgi)
-* [Postman](https://www.postman.com/downloads/)
 
-#### **Passos para o Deploy**
+#### **Passos para o Deploy Manual (Primeira Vez)**
 
-1.  **Clone o repositório e compile o projeto Java:**
+1.  **Clone e Compile o Projeto:**
     ```bash
-    git clone <url-do-repositorio>
-    cd <nome-do-repositorio>
-    mvn clean package 
+    git clone [https://github.com/Deyvidy-Alves/TodoList-Serverless-API.git](https://github.com/Deyvidy-Alves/TodoList-Serverless-API.git)
+    cd TodoList-Serverless-API
+    # Compila o JAR
+    mvn clean package -DskipTests
     ```
-
-2.  **Implante a infraestrutura com Terraform:**
+2.  **Implante a Infraestrutura:**
     ```bash
     cd infra
     terraform init
-    terraform apply
+    terraform apply --auto-approve
     ```
 
-## 6. Uso da API (Endpoints)
-
-A URL base da API (`<api-url>`) é fornecida na saída do `terraform apply`.
-
 ---
-#### **Criar uma Lista**
-Cria uma nova lista de tarefas.
+## 7. Limpeza (Destroy)
 
-* **Endpoint:** `POST <api-url>/v1/lists`
-* **Exemplo (`curl`):**
-  ```bash
-  curl -X POST \
-    '<api-url>/v1/lists' \
-    -H 'Content-Type: application/json' \
-    -d '{"name": "Compras do Supermercado"}'
-  ```
-* **Resposta de Sucesso (`201 Created`):**
-  ```json
-  {
-      "message": "Lista criada com sucesso!",
-      "listId": "a1b2c3d4-e5f6-7890-1234-567890abcdef"
-  }
-  ```
-
----
-#### **Listar todas as Listas**
-Retorna um array com todas as listas de tarefas cadastradas.
-
-* **Endpoint:** `GET <api-url>/v1/lists`
-* **Exemplo (`curl`):**
-  ```bash
-  curl -X GET '<api-url>/v1/lists'
-  ```
-* **Resposta de Sucesso (`200 OK`):**
-  ```json
-  [
-      {
-          "listId": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
-          "createdAt": "2025-10-01T19:05:17.891Z",
-          "listName": "Compras do Supermercado"
-      },
-      {
-          "listId": "b2c3d4e5-f6a7-8901-2345-67890abcdef1",
-          "createdAt": "2025-10-01T19:10:25.123Z",
-          "listName": "Tarefas da Casa"
-      }
-  ]
-  ```
-
----
-#### **Editar uma Lista**
-Atualiza o nome de uma lista de tarefas existente.
-
-* **Endpoint:** `PUT <api-url>/v1/lists/{listId}`
-* **Exemplo (`curl`):**
-  ```bash
-  curl -X PUT \
-    '<api-url>/v1/lists/a1b2c3d4-e5f6-7890-1234-567890abcdef' \
-    -H 'Content-Type: application/json' \
-    -d '{"name": "Compras de Sábado"}'
-  ```
-* **Resposta de Sucesso (`200 OK`):**
-  ```json
-  {
-      "message": "Lista atualizada com sucesso!",
-      "listId": "a1b2c3d4-e5f6-7890-1234-567890abcdef"
-  }
-  ```
-
----
-#### **Apagar uma Lista**
-Apaga uma lista de tarefas específica.
-
-* **Endpoint:** `DELETE <api-url>/v1/lists/{listId}`
-* **Exemplo (`curl`):**
-  ```bash
-  curl -X DELETE '<api-url>/v1/lists/a1b2c3d4-e5f6-7890-1234-567890abcdef'
-  ```
-* **Resposta de Sucesso (`200 OK`):**
-  ```json
-  {
-      "message": "Lista apagada com sucesso!",
-      "listId": "a1b2c3d4-e5f6-7890-1234-567890abcdef"
-  }
-  ```
-
-## 7. Limpeza
-
-Para remover toda a infraestrutura da sua conta da AWS, execute:
+Para remover toda a infraestrutura da sua conta da AWS:
 ```bash
 cd infra
 terraform destroy
-```
